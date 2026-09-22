@@ -1,0 +1,17 @@
+[project]
+name = "ladolce-api"
+version = "0.1.0"
+description = "La Dolce Saveur ordering chatbot - FastAPI backend"
+requires-python = ">=3.12"
+# Runtime dependencies are pinned in requirements.txt (the source of truth the
+# Docker image installs from). This file exists so tooling (ruff, pytest,
+# editors) has a project root to anchor to.
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]

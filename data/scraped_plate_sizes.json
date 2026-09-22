@@ -1,0 +1,44 @@
+[
+  {
+    "title": "The Royal Assortment (1kg)",
+    "base_price": 150,
+    "capacity": 50,
+    "weight_limit": 1000,
+    "image_url": "https://ladolcesaveur.com/box%201kg.png"
+  },
+  {
+    "title": "The Signature Selection (700g)",
+    "base_price": 100,
+    "capacity": 36,
+    "weight_limit": 700,
+    "image_url": "https://ladolcesaveur.com/box%20700g.png"
+  },
+  {
+    "title": "The Classic Petite (350g)",
+    "base_price": 60,
+    "capacity": 18,
+    "weight_limit": 350,
+    "image_url": "https://ladolcesaveur.com/box%20350g.png"
+  },
+  {
+    "title": "Small Round Tray (2kg)",
+    "base_price": 200,
+    "capacity": 120,
+    "weight_limit": 2000,
+    "image_url": "https://ladolcesaveur.com/tray1.png"
+  },
+  {
+    "title": "Medium Rectangular Tray (3kg)",
+    "base_price": 300,
+    "capacity": 180,
+    "weight_limit": 3000,
+    "image_url": "https://ladolcesaveur.com/tray2.png"
+  },
+  {
+    "title": "Large Rectangular Tray (4.5kg)",
+    "base_price": 400,
+    "capacity": 270,
+    "weight_limit": 4500,
+    "image_url": "https://ladolcesaveur.com/tray3.png"
+  }
+]

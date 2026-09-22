@@ -1,0 +1,14 @@
+[
+  {
+    "name": "Sukkari Date Roche Crisp Franci With Cream",
+    "name_ar": null,
+    "description": null,
+    "description_ar": null,
+    "price": null,
+    "image_url": null,
+    "category": "Stuffed Dates",
+    "variant": null,
+    "source": "pdf",
+    "note": "Pulled out of scraped_pdf_products.json before fuzzy matching: the product name was transcribed from a decorative script font on the catalogue page and is low-confidence (could plausibly be \"Crisp Franc\" or another reading). Needs visual confirmation against the source PDF before it's matched or added to the catalog."
+  }
+]

@@ -1,0 +1,23 @@
+# Secrets / env
+.env
+*.env
+!.env.example
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# Node / web
+node_modules/
+web/dist/
+.vite/
+
+# Data pipeline cache (raw fetched site assets - regenerable)
+data/cache/
+
+# OS / editor
+.DS_Store
+Thumbs.db

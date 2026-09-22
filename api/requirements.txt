@@ -1,0 +1,27 @@
+# Runtime dependencies for the FastAPI backend.
+# Installed with `pip install -r requirements.txt` inside the Docker image.
+#
+# Pinned to exact versions: (1) reproducible builds, and (2) it stops pip's
+# resolver from backtracking across dozens of candidate versions, which - on a
+# flaky network - turns a transient download timeout into a spurious
+# "ResolutionImpossible". Bump deliberately.
+fastapi==0.139.2
+uvicorn[standard]==0.51.0
+pydantic==2.13.4
+pydantic-settings==2.14.2
+sqlalchemy[asyncio]==2.0.51
+asyncpg==0.31.0
+psycopg[binary]==3.3.4
+alembic==1.18.5
+slowapi==0.1.10
+# Pinned to the 2.x line on purpose: 3.x/4.x moved the module layout and would
+# break `from pythonjsonlogger import jsonlogger` in app/core/logging.py.
+python-json-logger==2.0.7
+openai==2.47.0
+httpx==0.28.1
+# Phase 5 (knowledge base / RAG): pgvector gives us the SQLAlchemy `Vector` type
+# and cosine-distance comparator; numpy is its own dependency. pypdf extracts
+# text from PDF policy/FAQ documents at ingestion time.
+pgvector==0.5.0
+numpy==2.4.6
+pypdf==6.14.2
