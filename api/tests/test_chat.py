@@ -251,3 +251,9 @@ async def test_chat_suggestions_block_present_on_second_turn(client, use_fake_op
 async def test_chat_rejects_oversized_message(client):
     resp = await client.post("/api/chat", json={"message": "x" * 1001})
     assert resp.status_code == 422
+
+
+async def test_ready_endpoint_checks_database(client):
+    resp = await client.get("/api/health/ready")
+    assert resp.status_code == 200
+    assert resp.json() == {"status": "ready"}

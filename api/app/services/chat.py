@@ -17,6 +17,7 @@ from collections.abc import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.models import CartDraft, Conversation
 from app.services.tools import ALL_TOOLS, dispatch_tool, parse_tool_args
 
@@ -291,7 +292,11 @@ async def generate_chat_events(
         "ui_blocks": ui_blocks,
     }
 
-    suggestions = await generate_suggestions(client, model, user_text, reply_text)
+    suggestions = (
+        await generate_suggestions(client, model, user_text, reply_text)
+        if get_settings().suggestions_enabled
+        else []
+    )
     yield {"type": "suggestions_block", "suggestions": suggestions}
 
 

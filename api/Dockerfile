@@ -14,6 +14,9 @@ RUN pip install --timeout 120 --retries 10 -r requirements.txt
 
 COPY . .
 
+RUN useradd --system --no-create-home app
+USER app
+
 EXPOSE 8000
 
 # --proxy-headers: trust X-Forwarded-For from nginx so rate limiting sees real client

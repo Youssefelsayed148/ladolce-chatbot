@@ -1,6 +1,16 @@
 import { useCallback, useEffect, useState } from "react";
 import { confirmOrder, getCart, type ConfirmResult } from "../api";
 
+// Only ever link to http(s) URLs (never javascript:, data:, etc).
+function isHttpUrl(value: string): boolean {
+  try {
+    const { protocol } = new URL(value);
+    return protocol === "https:" || protocol === "http:";
+  } catch {
+    return false;
+  }
+}
+
 // The one persistent, non-per-message checkout action (design doc section 6).
 // It is enabled ONLY when the server reports the cart_draft is in 'reviewed'
 // state - we verify against the API, not local state alone, so a cart modified
@@ -35,11 +45,9 @@ export default function ConfirmCheckoutButton({
     try {
       const res = await confirmOrder(conversationId);
       setResult(res);
-      // Phase 4: if the checkout adapter returns a redirect, go there. Until
-      // then the stub returns no redirect and the order is safely saved.
-      if (res.redirect_url) {
-        window.location.assign(res.redirect_url);
-      }
+      // The checkout link (if any) is shown as a button rather than an
+      // automatic redirect: the guest chooses when to leave the chat, and a
+      // long URL is never shown or silently navigated to.
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong.");
       // A failed confirm may mean the review lapsed - re-check the real status.
@@ -51,8 +59,34 @@ export default function ConfirmCheckoutButton({
 
   // Outcome view: order captured (stub) or redirecting (future).
   if (result) {
-    if (result.redirect_url) {
-      return <p>Taking you to checkout…</p>;
+    if (result.redirect_url && isHttpUrl(result.redirect_url)) {
+      return (
+        <div style={{ padding: "0.75rem 1rem", background: "#eef6ec", borderRadius: 10 }}>
+          <strong>Your order is saved (#{result.order_id}).</strong>
+          <p style={{ margin: "0.25rem 0 0.75rem", color: "#3f5136" }}>
+            Continue to checkout to complete your order.
+          </p>
+          <a
+            href={result.redirect_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              display: "inline-block",
+              padding: "0.7rem 1.5rem",
+              borderRadius: 999,
+              background: "#1d2f15",
+              color: "#faf7f2",
+              fontWeight: 700,
+              letterSpacing: "0.05em",
+              textTransform: "uppercase",
+              fontSize: 12,
+              textDecoration: "none",
+            }}
+          >
+            Continue to checkout
+          </a>
+        </div>
+      );
     }
     return (
       <div style={{ padding: "0.75rem 1rem", background: "#eef6ec", borderRadius: 10 }}>

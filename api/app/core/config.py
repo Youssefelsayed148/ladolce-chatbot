@@ -43,6 +43,10 @@ class Settings(BaseSettings):
     # CORS - comma-separated list of allowed origins for the widget.
     cors_origins: str = Field(default="http://localhost:8080,http://localhost:5173")
 
+    # Follow-up chips cost one extra LLM call per message. Turn off to save
+    # free-tier quota; the widget simply shows no chips after the greeting.
+    suggestions_enabled: bool = Field(default=True)
+
     # Rate limiting for the public, unauthenticated /api/chat endpoint.
     chat_rate_limit: str = Field(default="20/minute")
 

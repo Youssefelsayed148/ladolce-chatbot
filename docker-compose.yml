@@ -54,6 +54,7 @@ services:
       LLM_MODEL: ${LLM_MODEL:-kimi-k2.7-code}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080,http://localhost:5173}
       CHAT_RATE_LIMIT: ${CHAT_RATE_LIMIT:-20/minute}
+      SUGGESTIONS_ENABLED: ${SUGGESTIONS_ENABLED:-true}
     # Mount the Alembic project so migrations can be run inside the api container
     # (which already has alembic + the psycopg driver installed), e.g.:
     #   docker compose run --rm -w /db api alembic upgrade head

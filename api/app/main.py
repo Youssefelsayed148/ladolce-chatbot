@@ -16,6 +16,9 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
 from app.core.config import get_settings
+from sqlalchemy import text
+
+from app.core.db import get_sessionmaker
 from app.core.limiter import limiter
 from app.core.logging import configure_logging, request_id_var
 from app import models  # noqa: F401  (register ORM tables on Base.metadata)
@@ -65,6 +68,15 @@ async def add_request_id(request: Request, call_next):
 @app.get("/api/health", tags=["health"])
 async def health() -> dict:
     return {"status": "ok", "environment": settings.environment}
+
+
+@app.get("/api/health/ready", tags=["health"])
+async def ready() -> dict:
+    """Readiness: also verifies the database answers. Kept separate from /health
+    so a DB blip doesn't make the container healthcheck restart the API."""
+    async with get_sessionmaker()() as session:
+        await session.execute(text("SELECT 1"))
+    return {"status": "ready"}
 
 
 app.include_router(chat.router)
