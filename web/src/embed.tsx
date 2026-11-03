@@ -14,7 +14,11 @@ const HOST_ID = "lds-chat-host";
 
 function currentLang(): string {
   try {
-    return window.localStorage.getItem("lang") ?? document.documentElement.lang ?? "en";
+    return (
+      window.localStorage.getItem("la_dolce_lang") ?? // the store's own key
+      window.localStorage.getItem("lang") ??
+      (document.documentElement.lang || "en")
+    );
   } catch {
     return document.documentElement.lang || "en";
   }

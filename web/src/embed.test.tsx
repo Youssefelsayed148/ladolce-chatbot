@@ -36,7 +36,7 @@ describe("embeddable widget loader", () => {
   });
 
   it("renders right-to-left when the store language is Arabic", async () => {
-    window.localStorage.setItem("lang", "ar");
+    window.localStorage.setItem("la_dolce_lang", "ar");
     let host: HTMLElement | null = null;
     await act(async () => {
       host = mountWidget(scriptTag({ "data-api": "https://chat.example" }));
