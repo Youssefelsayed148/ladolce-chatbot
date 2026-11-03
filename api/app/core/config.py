@@ -21,6 +21,9 @@ class Settings(BaseSettings):
         default="postgresql+asyncpg://ladolce:ladolce@db:5432/ladolce"
     )
 
+    # Client store API (read-only catalog sync / quotes).
+    store_api_base: str = Field(default="https://ladolce.theosirislabs.com")
+
     # OpenAI - kept for the embeddings/RAG exception and as a one-line revert
     # path for chat. See docs/llm-layer-audit.md Section 8 for revert steps.
     openai_api_key: str = Field(default="")
