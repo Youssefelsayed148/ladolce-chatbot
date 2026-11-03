@@ -52,6 +52,8 @@ def send_to_checkout(order) -> HandoffResult:
     replace the body below with the confirmed integration; do not change the
     signature or the HandoffResult shape.
     """
+    # Never log the payload itself: it carries customer gift messages.
+    payload = getattr(order, "handoff_payload", None) or {}
     logger.info(
         "checkout_handoff",
         extra={
@@ -59,7 +61,7 @@ def send_to_checkout(order) -> HandoffResult:
             "total_price": (
                 float(order.total_price) if getattr(order, "total_price", None) is not None else None
             ),
-            "handoff_payload": getattr(order, "handoff_payload", None),
+            "store_line_count": len(payload.get("store_lines") or []),
         },
     )
     return HandoffResult(
