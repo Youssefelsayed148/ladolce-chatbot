@@ -73,11 +73,53 @@ class Product(Base):
     # depend on the LLM's free-text query happening to substring-match a
     # product's name/description in search_products.
     is_bestseller: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # Client-store references (filled by scripts/sync_store_catalog.py).
+    store_product_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    # Individual dates only: the store's bespoke "date" id and piece weight.
+    store_date_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    weight_grams: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     category: Mapped["Category | None"] = relationship(back_populates="products")
     slot_cost: Mapped["ProductSlotCost | None"] = relationship(
         back_populates="product", uselist=False
     )
+    variants: Mapped[list["ProductVariant"]] = relationship(
+        back_populates="product", order_by="ProductVariant.id"
+    )
+
+
+class ProductVariant(Base):
+    """A purchasable size/weight of a store product (store variantId)."""
+
+    __tablename__ = "product_variants"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    product_id: Mapped[int] = mapped_column(
+        ForeignKey("products.id"), index=True, nullable=False
+    )
+    store_variant_id: Mapped[str] = mapped_column(String(36), unique=True, nullable=False)
+    sku: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    label: Mapped[str] = mapped_column(String(128), nullable=False)  # e.g. "500g / M"
+    weight_grams: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    size: Mapped[str | None] = mapped_column(String(8), nullable=True)  # S/M/L
+    price: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
+    stock: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    is_default: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+    product: Mapped["Product"] = relationship(back_populates="variants")
+
+
+class Finish(Base):
+    """Ribbon finish offered by the store's custom-box builder."""
+
+    __tablename__ = "finishes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    store_finish_id: Mapped[str] = mapped_column(String(36), unique=True, nullable=False)
+    name_en: Mapped[str] = mapped_column(String(255), nullable=False)
+    name_ar: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
 
 class PlateSize(Base):
@@ -88,6 +130,11 @@ class PlateSize(Base):
     capacity: Mapped[int] = mapped_column(Integer, nullable=False)
     base_price: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
     image_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Client-store canvas (BOX/TRAY). `capacity` stays = max pieces.
+    store_canvas_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    kind: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    capacity_grams: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    max_pieces: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
 
 class ProductSlotCost(Base):

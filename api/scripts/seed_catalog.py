@@ -49,7 +49,7 @@ API_DIR = Path(__file__).resolve().parent.parent
 if str(API_DIR) not in sys.path:
     sys.path.insert(0, str(API_DIR))
 
-from app.models import Category, PlateSize, Product, ProductSlotCost  # noqa: E402
+from app.models import Category, PlateSize, Product, ProductSlotCost, ProductVariant  # noqa: E402
 
 REPO_ROOT = API_DIR.parent
 
@@ -99,6 +99,7 @@ def _product_name(row: dict) -> str:
 def seed(session: Session, products_data: list[dict], plate_sizes_data: list[dict]) -> dict:
     # Clear catalog tables (respect FK order). Cart tables don't exist yet.
     session.execute(delete(Product.__table__.metadata.tables["product_slot_cost"]))
+    session.execute(delete(ProductVariant))
     session.execute(delete(Product))
     session.execute(delete(PlateSize))
     session.execute(delete(Category))
