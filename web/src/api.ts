@@ -3,6 +3,14 @@
 
 import type { StoreLine } from "./storeCart";
 
+// Base URL of the chat API. Empty = same origin (the standalone SPA behind the
+// reverse proxy); the embeddable widget sets it from its script tag's data-api.
+let apiBase = "";
+export function setApiBase(base: string): void {
+  apiBase = base.replace(/\/+$/, "");
+}
+const apiFetch = (path: string, init?: RequestInit) => fetch(apiBase + path, init);
+
 export interface CartItem {
   type: "single_product" | "custom_plate";
   cart_item_id: number;
@@ -57,8 +65,7 @@ export async function reportHandoff(
   report: { success: boolean; failed_items: string[]; error?: string }
 ): Promise<{ order_id: number; status: string }> {
   return asJson(
-    await fetch(
-      `/api/order/${encodeURIComponent(conversationId)}/${orderId}/handoff-result`,
+    await apiFetch(`/api/order/${encodeURIComponent(conversationId)}/${orderId}/handoff-result`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -82,18 +89,18 @@ async function asJson<T>(resp: Response): Promise<T> {
 }
 
 export async function getCart(conversationId: string): Promise<CartState> {
-  return asJson<CartState>(await fetch(`/api/cart/${encodeURIComponent(conversationId)}`));
+  return asJson<CartState>(await apiFetch(`/api/cart/${encodeURIComponent(conversationId)}`));
 }
 
 export async function reviewCart(conversationId: string): Promise<CartState> {
   return asJson<CartState>(
-    await fetch(`/api/cart/${encodeURIComponent(conversationId)}/review`, { method: "POST" })
+    await apiFetch(`/api/cart/${encodeURIComponent(conversationId)}/review`, { method: "POST" })
   );
 }
 
 export async function confirmOrder(conversationId: string): Promise<ConfirmResult> {
   return asJson<ConfirmResult>(
-    await fetch(`/api/order/${encodeURIComponent(conversationId)}/confirm`, { method: "POST" })
+    await apiFetch(`/api/order/${encodeURIComponent(conversationId)}/confirm`, { method: "POST" })
   );
 }
 
@@ -120,11 +127,11 @@ export interface PlateSize {
 
 export async function listProducts(category?: string): Promise<Product[]> {
   const q = category ? `?category=${encodeURIComponent(category)}` : "";
-  return asJson<Product[]>(await fetch(`/api/products${q}`));
+  return asJson<Product[]>(await apiFetch(`/api/products${q}`));
 }
 
 export async function listPlateSizes(): Promise<PlateSize[]> {
-  return asJson<PlateSize[]>(await fetch("/api/plate-sizes"));
+  return asJson<PlateSize[]>(await apiFetch("/api/plate-sizes"));
 }
 
 // --------------------------------------------------------------------------- //
@@ -187,7 +194,7 @@ export type ChatEvent =
 export async function getGreetingSuggestions(): Promise<string[]> {
   try {
     const data = await asJson<{ suggestions: string[] }>(
-      await fetch("/api/chat/suggestions/greeting")
+      await apiFetch("/api/chat/suggestions/greeting")
     );
     return data.suggestions ?? [];
   } catch {
@@ -206,7 +213,7 @@ export async function streamChat(
   onEvent: (event: ChatEvent) => void,
   signal?: AbortSignal
 ): Promise<void> {
-  const resp = await fetch("/api/chat", {
+  const resp = await apiFetch("/api/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ message, conversation_id: conversationId }),

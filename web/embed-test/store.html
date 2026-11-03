@@ -1,0 +1,20 @@
+<!doctype html>
+<!-- Imitates the store page: hostile global CSS + the ONE script tag a client adds.
+     Serve with:  npm run build && npx vite preview --port 4173  then open /embed-test/store.html
+     (copy this file into dist/ first, or run:  cp embed-test/store.html dist/store.html) -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Imitation store page</title>
+    <style>
+      * { box-sizing: content-box !important; }
+      button { background: red !important; color: yellow !important; }
+      div, p, h3 { font-family: monospace !important; letter-spacing: 6px; }
+    </style>
+  </head>
+  <body>
+    <h1>La Dolce Saveur (imitation)</h1>
+    <script>localStorage.setItem("lang", "en");</script>
+    <script src="/widget.js" data-api="http://localhost:8000" async></script>
+  </body>
+</html>

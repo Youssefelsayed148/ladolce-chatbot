@@ -39,3 +39,17 @@ Edit `LLM_API_BASE`, `LLM_API_KEY`, `LLM_MODEL` in `.env`, then
 
 ## 6. Smoke test after deploy
 `curl https://YOUR_DOMAIN/api/health`, then one real chat + review + confirm.
+
+## Embedding the widget on ladolcesaveur.com
+
+The client adds ONE tag (before `</body>`):
+
+```html
+<script src="https://CHAT_DOMAIN/widget.js" data-api="https://CHAT_DOMAIN" async></script>
+```
+
+- `widget.js` (built by `npm run build` in `web/`) mounts the launcher inside a shadow root, so store CSS cannot affect it and vice versa. Arabic (`localStorage.lang` starting with `ar`) renders right-to-left.
+- Set `CORS_ORIGINS=https://ladolcesaveur.com,https://www.ladolcesaveur.com` in `.env` (the browser calls our API cross-origin).
+- On confirm the widget calls the store API (`STORE_API_BASE`) from the customer's browser with their own cart token, then links to `STORE_CHECKOUT_URL`. The store API must allow the store's origin (it currently reflects any origin with credentials - restrict it to ladolcesaveur.com).
+- `widget.js` is served with `max-age=300, must-revalidate`; hashed `/assets/*` are cached for a year.
+- Local check: `cd web && npm run build && cp embed-test/store.html dist/ && python -m http.server 4173 -d dist`, then open `/store.html`.
