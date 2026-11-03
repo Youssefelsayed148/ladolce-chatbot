@@ -224,12 +224,17 @@ ADD_SINGLE_PRODUCT_TOOL = {
     "type": "function",
     "function": {
         "name": "add_single_product",
-        "description": "Add a standalone product (a pack, gift box, tray, etc.) to the cart.",
+        "description": (
+            "Add a standalone product (a pack, gift box, tray, etc.) to the cart. If the "
+            "product lists variants (sizes/weights), ask the guest which one and pass "
+            "its variant_id."
+        ),
         "parameters": {
             "type": "object",
             "additionalProperties": False,
             "properties": {
                 "product_id": {"type": "integer"},
+                "variant_id": {"type": "integer", "description": "From the product's variants list."},
                 "quantity": {"type": "integer", "minimum": 1, "default": 1},
             },
             "required": ["product_id", "quantity"],
@@ -366,7 +371,11 @@ async def dispatch_tool(
 
         if name == "add_single_product":
             return await cart_service.add_single_product(
-                session, draft, int(args["product_id"]), int(args.get("quantity", 1))
+                session,
+                draft,
+                int(args["product_id"]),
+                int(args.get("quantity", 1)),
+                int(args["variant_id"]) if args.get("variant_id") is not None else None,
             )
 
         if name == "start_plate":

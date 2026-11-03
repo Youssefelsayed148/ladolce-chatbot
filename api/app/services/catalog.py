@@ -48,7 +48,7 @@ async def list_products(
         stmt = stmt.join(Category).where(Category.name == category)
     # Eager-load category: it's read after the query (p.category.name), which
     # would trigger a forbidden lazy load under async otherwise.
-    stmt = stmt.options(selectinload(Product.category)).order_by(Product.name)
+    stmt = stmt.options(selectinload(Product.category), selectinload(Product.variants)).order_by(Product.name)
     result = await session.execute(stmt)
     return list(result.scalars().all())
 
@@ -74,6 +74,19 @@ def _row_from_product(p: Product) -> dict:
         "description": p.description,
         "price": float(p.price) if p.price is not None else None,
         "category": p.category.name if p.category else None,
+        # Present only for store products sold in sizes/weights: the guest must
+        # pick one (pass variant_id to add_single_product).
+        **(
+            {
+                "variants": [
+                    {"variant_id": v.id, "label": v.label, "price": float(v.price)}
+                    for v in p.variants
+                    if v.is_active and (v.stock is None or v.stock > 0)
+                ]
+            }
+            if p.variants
+            else {}
+        ),
     }
 
 
@@ -89,7 +102,7 @@ async def _cross_category_siblings(
         return []
     seen_ids = {p.id for p in products}
     stmt = select(Product).where(Product.is_active.is_(True)).options(
-        selectinload(Product.category)
+        selectinload(Product.category), selectinload(Product.variants)
     )
     result = await session.execute(stmt)
     return [
@@ -128,7 +141,7 @@ async def search_products(
     if category:
         stmt = stmt.join(Category).where(Category.name == category)
 
-    stmt = stmt.options(selectinload(Product.category)).order_by(Product.name).limit(limit)
+    stmt = stmt.options(selectinload(Product.category), selectinload(Product.variants)).order_by(Product.name).limit(limit)
     result = await session.execute(stmt)
     products = list(result.scalars().all())
 
@@ -153,7 +166,7 @@ async def list_bestsellers(session: AsyncSession, limit: int = 6) -> list[dict]:
     stmt = (
         select(Product)
         .where(Product.is_active.is_(True), Product.is_bestseller.is_(True))
-        .options(selectinload(Product.category))
+        .options(selectinload(Product.category), selectinload(Product.variants))
         .order_by(Product.name)
         .limit(limit)
     )

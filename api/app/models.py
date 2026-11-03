@@ -232,12 +232,15 @@ class CartItem(Base):
     line_total: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
     # Custom boxes only: ribbon finish and optional gift message (<= 180 chars).
     finish_id: Mapped[int | None] = mapped_column(ForeignKey("finishes.id"), nullable=True)
+    # Single products with size/weight variants: the chosen store variant.
+    variant_id: Mapped[int | None] = mapped_column(ForeignKey("product_variants.id"), nullable=True)
     gift_message: Mapped[str | None] = mapped_column(String(180), nullable=True)
 
     cart_draft: Mapped["CartDraft"] = relationship(back_populates="items")
     product: Mapped["Product | None"] = relationship()
     plate_size: Mapped["PlateSize | None"] = relationship()
     finish: Mapped["Finish | None"] = relationship()
+    variant: Mapped["ProductVariant | None"] = relationship()
     plate_contents: Mapped[list["CartPlateContent"]] = relationship(
         back_populates="cart_item",
         cascade="all, delete-orphan",

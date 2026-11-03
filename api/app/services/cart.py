@@ -28,6 +28,7 @@ from app.models import (
     PlateSize,
     Product,
     ProductSlotCost,
+    ProductVariant,
 )
 
 from app.services import store_quote
@@ -195,13 +196,58 @@ def _plate_line_total(item: CartItem) -> float:
 # --------------------------------------------------------------------------- #
 # Mutations
 # --------------------------------------------------------------------------- #
+async def _resolve_variant(
+    session: AsyncSession, product: Product, variant_id: int | None, quantity: int
+) -> ProductVariant | None:
+    """The store variant to buy, or None for a legacy product without variants.
+    Several active variants and no choice -> an error listing the options."""
+    result = await session.execute(
+        select(ProductVariant)
+        .where(ProductVariant.product_id == product.id)
+        .where(ProductVariant.is_active.is_(True))
+        .order_by(ProductVariant.id)
+    )
+    variants = list(result.scalars().all())
+    if not variants:
+        return None
+    if variant_id is None:
+        if len(variants) > 1:
+            raise CartError(
+                f"'{product.name}' comes in several sizes - ask the guest which one "
+                "and pass its variant_id.",
+                options=[
+                    {"variant_id": v.id, "label": v.label, "price": float(v.price)}
+                    for v in variants
+                ],
+            )
+        variant = variants[0]
+    else:
+        variant = next((v for v in variants if v.id == variant_id), None)
+        if variant is None:
+            raise NotFound(f"No such size (variant_id={variant_id}) for '{product.name}'.")
+    if variant.stock is not None and quantity > variant.stock:
+        raise CartError(
+            f"Only {variant.stock} of '{product.name}' ({variant.label}) in stock."
+            if variant.stock > 0
+            else f"'{product.name}' ({variant.label}) is out of stock.",
+            available=max(variant.stock, 0),
+        )
+    return variant
+
+
 async def add_single_product(
-    session: AsyncSession, draft: CartDraft, product_id: int, quantity: int
+    session: AsyncSession,
+    draft: CartDraft,
+    product_id: int,
+    quantity: int,
+    variant_id: int | None = None,
 ) -> ToolResult:
     if quantity < 1:
         raise CartError("Quantity must be at least 1.")
     product = await _get_product(session, product_id)
-    if product.price is None:
+    variant = await _resolve_variant(session, product, variant_id, quantity)
+    price = variant.price if variant else product.price
+    if price is None:
         raise CartError(f"'{product.name}' is not available for purchase.")
     _revert_to_building(draft)
 
@@ -211,14 +257,18 @@ async def add_single_product(
         .where(CartItem.cart_draft_id == draft.id)
         .where(CartItem.item_type == "single_product")
         .where(CartItem.product_id == product_id)
+        .where(
+            CartItem.variant_id == variant.id if variant else CartItem.variant_id.is_(None)
+        )
     )
     item = result.scalar_one_or_none()
-    unit_price = float(product.price)
+    unit_price = float(price)
     if item is None:
         item = CartItem(
             cart_draft_id=draft.id,
             item_type="single_product",
             product_id=product_id,
+            variant_id=variant.id if variant else None,
             quantity=quantity,
             unit_price=unit_price,  # snapshot at add-time
             line_total=unit_price * quantity,
@@ -233,7 +283,12 @@ async def add_single_product(
     state = await get_cart_state_by_draft(session, draft)
     return ToolResult(
         data={
-            "added": {"product": product.name, "quantity": quantity, "unit_price": unit_price},
+            "added": {
+                "product": product.name,
+                "quantity": quantity,
+                "unit_price": unit_price,
+                **({"variant": variant.label} if variant else {}),
+            },
             "cart": state,
         },
         ui_blocks=[_product_card_block(product)],
@@ -446,9 +501,12 @@ async def _load_items(session: AsyncSession, draft_id: int) -> list[CartItem]:
         .where(CartItem.cart_draft_id == draft_id)
         .options(
             selectinload(CartItem.product).selectinload(Product.category),
+            selectinload(CartItem.variant),
             selectinload(CartItem.plate_size),
             selectinload(CartItem.finish),
-            selectinload(CartItem.plate_contents).selectinload(CartPlateContent.product),
+            selectinload(CartItem.plate_contents)
+            .selectinload(CartPlateContent.product)
+            .selectinload(Product.category),
         )
         .order_by(CartItem.id)
         .execution_options(populate_existing=True)
@@ -522,6 +580,15 @@ def _serialize_item(item: CartItem) -> dict:
             "quantity": item.quantity,
             "unit_price": float(item.unit_price),
             "line_total": float(item.line_total),
+            **(
+                {
+                    "variant_id": item.variant_id,
+                    "variant_label": item.variant.label,
+                    "store_variant_id": item.variant.store_variant_id,
+                }
+                if item.variant
+                else {}
+            ),
         }
     return {
         "type": "custom_plate",
