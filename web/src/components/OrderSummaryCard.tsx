@@ -34,11 +34,22 @@ export default function OrderSummaryCard({ cart }: { cart: CartState }) {
             <div>
               {item.type === "single_product" ? (
                 <span>
-                  {item.name} × {item.quantity}
+                  {item.name}
+                  {item.variant_label ? ` (${item.variant_label})` : ""} × {item.quantity}
                 </span>
               ) : (
                 <span>
-                  {item.plate_size} (custom box · {item.capacity_used}/{item.capacity_total} slots)
+                  {item.plate_size} (custom box ·{" "}
+                  {item.pieces_total != null
+                    ? `${item.pieces_used}/${item.pieces_total} pieces · ${item.grams_used}/${item.grams_total}g`
+                    : `${item.capacity_used}/${item.capacity_total} slots`}
+                  )
+                  {item.finish && (
+                    <div style={{ color: "#6d7081" }}>Ribbon: {item.finish}</div>
+                  )}
+                  {item.gift_message && (
+                    <div style={{ color: "#6d7081" }}>Gift message: “{item.gift_message}”</div>
+                  )}
                   {item.contents && item.contents.length > 0 && (
                     <ul style={{ margin: "0.25rem 0 0", paddingLeft: "1rem", color: "#6d7081" }}>
                       {item.contents.map((c) => (

@@ -6,14 +6,18 @@ except the confirm endpoint, which calls send_to_checkout() and reacts to the
 returned HandoffResult. Phase 4b replaces only the INSIDE of send_to_checkout();
 the function signature and HandoffResult shape are the stable contract.
 
-Current implementation is the Phase 4a stub: it structurally logs the full
-handoff payload and reports the order as safely captured but not yet dispatched
-to a live checkout (there isn't one wired up yet). That is a legitimate real
-behavior — orders are durably saved in the DB regardless.
+Current implementation (store integration): the cart is replayed into the
+store's own cart by the widget, running in the guest's browser with the guest's
+own cart token (see web/src/storeCart.ts). The server therefore only logs the
+payload and returns the store checkout URL; the order is NOT marked dispatched
+here - the widget reports the outcome to POST /api/order/.../handoff-result,
+which flips the status to 'sent_to_checkout'. Orders are durably saved first.
 """
 
 import logging
 from dataclasses import dataclass
+
+from app.core.config import get_settings
 
 logger = logging.getLogger("app.checkout")
 
@@ -48,9 +52,8 @@ def send_to_checkout(order) -> HandoffResult:
     replace the body below with the confirmed integration; do not change the
     signature or the HandoffResult shape.
     """
-    # --- Phase 4a stub implementation -------------------------------------- #
     logger.info(
-        "checkout_handoff_stub",
+        "checkout_handoff",
         extra={
             "order_id": getattr(order, "id", None),
             "total_price": (
@@ -61,7 +64,7 @@ def send_to_checkout(order) -> HandoffResult:
     )
     return HandoffResult(
         success=True,
-        redirect_url=None,
+        redirect_url=get_settings().store_checkout_url,
         error_message=None,
-        dispatched=False,  # no live checkout yet — order remains pending_handoff
+        dispatched=False,  # flipped by the widget's handoff-result report
     )

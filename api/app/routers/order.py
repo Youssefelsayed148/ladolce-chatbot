@@ -9,10 +9,12 @@ checkout adapter is wired in Phase 4.
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import checkout_adapter
+from app.core.config import get_settings
 from app.core.db import get_session
 from app.models import Conversation, Order
 from app.services import cart as cart_service
@@ -112,4 +114,41 @@ async def confirm_order(
         "total_price": float(order.total_price),
         "redirect_url": redirect_url,
         "handoff_error": handoff_error,
+        "store_lines": payload.get("store_lines", []),
+        "store_api_base": get_settings().store_api_base,
     }
+
+
+class HandoffReport(BaseModel):
+    success: bool
+    # Names of lines the store refused (stock etc.) when success is False.
+    failed_items: list[str] = Field(default_factory=list, max_length=50)
+    error: str | None = Field(default=None, max_length=500)
+
+
+@router.post("/{conversation_id}/{order_id}/handoff-result")
+async def report_handoff_result(
+    conversation_id: str,
+    order_id: int,
+    report: HandoffReport,
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """The widget reports whether it filled the store's cart. Success marks the
+    order 'sent_to_checkout'; failure leaves it 'pending_handoff' (still saved)
+    with the outcome recorded in handoff_payload."""
+    conversation = await _conversation_or_404(session, conversation_id)
+    order = await session.get(Order, order_id)
+    if order is None or order.conversation_id != conversation.id:
+        raise HTTPException(status_code=404, detail="Unknown order.")
+    order.handoff_payload = {
+        **(order.handoff_payload or {}),
+        "handoff_result": report.model_dump(),
+    }
+    if report.success:
+        order.status = "sent_to_checkout"
+    await session.commit()
+    logger.info(
+        "order_handoff_reported",
+        extra={"order_id": order.id, "success": report.success, "failed": report.failed_items},
+    )
+    return {"order_id": order.id, "status": order.status}

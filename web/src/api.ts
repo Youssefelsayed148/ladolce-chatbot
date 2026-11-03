@@ -1,6 +1,8 @@
 // Minimal typed API client for the cart/order endpoints. The reverse proxy
 // serves the API under /api on the same origin as the SPA.
 
+import type { StoreLine } from "./storeCart";
+
 export interface CartItem {
   type: "single_product" | "custom_plate";
   cart_item_id: number;
@@ -9,6 +11,13 @@ export interface CartItem {
   quantity?: number;
   unit_price: number;
   line_total: number;
+  variant_label?: string;
+  finish?: string | null;
+  gift_message?: string | null;
+  pieces_used?: number;
+  pieces_total?: number;
+  grams_used?: number;
+  grams_total?: number;
   plate_size?: string | null;
   capacity_used?: number | null;
   capacity_total?: number | null;
@@ -37,6 +46,26 @@ export interface ConfirmResult {
   redirect_url?: string | null;
   // Set when the handoff didn't complete; the order is still safely saved.
   handoff_error?: string | null;
+  // What the widget replays into the store's own cart, and where that API lives.
+  store_lines?: StoreLine[];
+  store_api_base?: string;
+}
+
+export async function reportHandoff(
+  conversationId: string,
+  orderId: number,
+  report: { success: boolean; failed_items: string[]; error?: string }
+): Promise<{ order_id: number; status: string }> {
+  return asJson(
+    await fetch(
+      `/api/order/${encodeURIComponent(conversationId)}/${orderId}/handoff-result`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(report),
+      }
+    )
+  );
 }
 
 async function asJson<T>(resp: Response): Promise<T> {

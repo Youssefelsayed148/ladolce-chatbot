@@ -53,7 +53,8 @@ def test_stub_reports_saved_but_not_dispatched():
     result = checkout_adapter.send_to_checkout(_FakeOrder())
     assert result.success is True
     assert result.dispatched is False
-    assert result.redirect_url is None
+    # The widget fills the store cart; the server just points at the checkout page.
+    assert result.redirect_url == "https://ladolcesaveur.com/checkout"
     assert result.error_message is None
 
 
@@ -64,9 +65,10 @@ async def test_confirm_with_stub_stays_pending_handoff(client, reviewed_cart):
     resp = await client.post(f"/api/order/{reviewed_cart['session_token']}/confirm")
     assert resp.status_code == 200
     body = resp.json()
-    # Stub is not dispatched -> order remains pending_handoff, no redirect.
+    # Not dispatched until the widget reports back -> stays pending_handoff.
     assert body["status"] == "pending_handoff"
-    assert body["redirect_url"] is None
+    assert body["redirect_url"] == "https://ladolcesaveur.com/checkout"
+    assert body["store_lines"] == []  # legacy product without a store variant
     assert body["handoff_error"] is None
 
 

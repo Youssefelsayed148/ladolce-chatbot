@@ -690,4 +690,30 @@ async def build_handoff_payload(
         "cart_draft_id": draft.id,
         "items": summary["items"],
         "total_price": summary["total_price"],
+        # What the widget replays into the store's own cart (prices are always
+        # recomputed by the store's server).
+        "store_lines": await build_store_lines(session, draft),
     }
+
+
+async def build_store_lines(session: AsyncSession, draft: CartDraft) -> list[dict]:
+    lines: list[dict] = []
+    for item in await _load_items(session, draft.id):
+        if item.item_type == "single_product":
+            if item.variant:
+                lines.append({
+                    "kind": "single",
+                    "variantId": item.variant.store_variant_id,
+                    "quantity": item.quantity,
+                    "name": item.product.name if item.product else None,
+                })
+        elif _is_store_plate(item) and item.finish:
+            lines.append({
+                "kind": "bespoke",
+                "canvasId": item.plate_size.store_canvas_id,
+                "finishId": item.finish.store_finish_id,
+                "items": bespoke_items_payload(item),
+                **({"giftMessage": item.gift_message} if item.gift_message else {}),
+                "name": item.plate_size.name,
+            })
+    return lines
