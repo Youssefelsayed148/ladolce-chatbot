@@ -225,6 +225,7 @@ async def generate_chat_events(
     history: list[dict],
     user_text: str,
     context_note: str = "",
+    embedding_client=None,
 ) -> AsyncGenerator[dict, None]:
     """Yield events: {'type': 'token'|'tool_call'|'ui_block'|'done', ...}."""
     system_content = SYSTEM_PROMPT + (f"\n\n{context_note}" if context_note else "")
@@ -258,7 +259,9 @@ async def generate_chat_events(
             made_tool_calls.append({"name": slot["name"], "arguments": args})
             yield {"type": "tool_call", "name": slot["name"], "arguments": args}
 
-            result = await dispatch_tool(session, client, conversation, draft, slot["name"], args)
+            result = await dispatch_tool(
+                session, client, conversation, draft, slot["name"], args, embedding_client
+            )
             for block in result.ui_blocks:
                 ui_blocks.append(block)
                 yield {"type": "ui_block", "block": block}

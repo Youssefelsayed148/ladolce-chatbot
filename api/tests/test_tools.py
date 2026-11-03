@@ -280,3 +280,30 @@ def test_all_tools_have_additional_properties_false():
         assert params.get("additionalProperties") is False, (
             f"{tool['function']['name']} is missing additionalProperties: False"
         )
+
+
+async def test_knowledge_base_search_embeds_via_embedding_client_not_chat_client(prepare_db):
+    # Free chat providers have no embeddings endpoint, so KB search must use the
+    # dedicated embedding client and never touch the chat client.
+    from tests.conftest import FakeOpenAIClient
+
+    class ChatClientWithoutEmbeddings:
+        @property
+        def embeddings(self):
+            raise AssertionError("chat client must not be used for embeddings")
+
+    embedding_client = FakeOpenAIClient()
+    async with get_sessionmaker()() as session:
+        conversation = Conversation(session_token="kb-embed-token")
+        session.add(conversation)
+        await session.commit()
+        await dispatch_tool(
+            session,
+            ChatClientWithoutEmbeddings(),
+            conversation,
+            None,
+            "search_knowledge_base",
+            {"query": "shipping"},
+            embedding_client,
+        )
+    assert embedding_client.embeddings.calls

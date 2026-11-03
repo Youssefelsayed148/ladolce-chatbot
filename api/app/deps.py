@@ -10,15 +10,6 @@ from openai import AsyncOpenAI
 from app.core.config import get_settings
 
 
-# --- OPENAI (disabled, see docs/llm-layer-audit.md) ---
-# def get_openai_client() -> AsyncOpenAI:
-#     settings = get_settings()
-#     # A placeholder key keeps the constructor from raising when no real key is
-#     # configured (local dev / scaffold). Any actual API call then fails and is
-#     # caught by the endpoint, which relays a friendly fallback.
-#     return AsyncOpenAI(api_key=settings.openai_api_key or "sk-not-configured")
-# --- END OPENAI ---
-
 
 def get_openai_client() -> AsyncOpenAI:
     settings = get_settings()
@@ -29,3 +20,11 @@ def get_openai_client() -> AsyncOpenAI:
         base_url=settings.llm_api_base,
         api_key=settings.llm_api_key or "sk-not-configured",
     )
+
+
+def get_embedding_client() -> AsyncOpenAI:
+    """Client for knowledge-base embeddings. Always the OpenAI API (OPENAI_API_KEY),
+    independent of the chat provider: free chat providers (e.g. OpenCode) have no
+    embeddings endpoint, so the chat client must not be used for this."""
+    settings = get_settings()
+    return AsyncOpenAI(api_key=settings.openai_api_key or "sk-not-configured")

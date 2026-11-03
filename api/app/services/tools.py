@@ -264,6 +264,7 @@ async def dispatch_tool(
     draft: CartDraft,
     name: str,
     args: dict,
+    embedding_client: Any = None,
 ) -> cart_service.ToolResult:
     """Execute a tool call. Returns ToolResult(data, ui_blocks). Cart errors are
     caught and returned as structured error data for the model to relay."""
@@ -271,7 +272,7 @@ async def dispatch_tool(
         if name == "search_knowledge_base":
             settings = get_settings()
             results = await kb_service.search_kb(
-                session, client, args.get("query", ""), embedding_model=settings.openai_embedding_model
+                session, embedding_client or client, args.get("query", ""), embedding_model=settings.openai_embedding_model
             )
             if not results:
                 return cart_service.ToolResult(

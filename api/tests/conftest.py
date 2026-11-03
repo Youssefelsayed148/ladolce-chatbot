@@ -39,7 +39,7 @@ db_module.reset_engine()
 
 from app.core.db import Base, get_engine, get_sessionmaker  # noqa: E402
 from app import models  # noqa: E402,F401  (register tables)
-from app.deps import get_openai_client  # noqa: E402
+from app.deps import get_embedding_client, get_openai_client  # noqa: E402
 from app.main import app  # noqa: E402
 from app.services.chat import SUGGESTIONS_SYSTEM_PROMPT  # noqa: E402
 
@@ -305,10 +305,12 @@ def use_fake_openai():
     def _install(mode="plain", suggestions_mode="ok"):
         fake = FakeOpenAIClient(mode=mode, suggestions_mode=suggestions_mode)
         app.dependency_overrides[get_openai_client] = lambda: fake
+        app.dependency_overrides[get_embedding_client] = lambda: fake
         return fake
 
     yield _install
     app.dependency_overrides.pop(get_openai_client, None)
+    app.dependency_overrides.pop(get_embedding_client, None)
 
 
 @pytest_asyncio.fixture

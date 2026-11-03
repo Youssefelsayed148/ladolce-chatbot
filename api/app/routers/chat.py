@@ -30,7 +30,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.core.db import get_sessionmaker
 from app.core.limiter import chat_rate_limit, limiter
-from app.deps import get_openai_client
+from app.deps import get_embedding_client, get_openai_client
 from app.models import Conversation, Message
 from app.services import cart as cart_service
 from app.services import catalog as catalog_service
@@ -129,7 +129,7 @@ async def _categories_context(session: AsyncSession) -> str:
 
 
 async def _event_stream(
-    client: AsyncOpenAI, model: str, body: ChatRequest
+    client: AsyncOpenAI, model: str, body: ChatRequest, embedding_client: AsyncOpenAI
 ) -> AsyncGenerator[str, None]:
     async with get_sessionmaker()() as session:
         conversation = await _get_or_create_conversation(session, body.conversation_id)
@@ -168,7 +168,8 @@ async def _event_stream(
         suggestions: list[str] = []
         try:
             async for event in generate_chat_events(
-                session, client, model, conversation, draft, history, body.message, context_note
+                session, client, model, conversation, draft, history, body.message, context_note,
+                embedding_client,
             ):
                 if event["type"] == "token":
                     yield _sse(event)
@@ -241,10 +242,11 @@ async def chat(
     request: Request,
     body: ChatRequest,
     client: AsyncOpenAI = Depends(get_openai_client),
+    embedding_client: AsyncOpenAI = Depends(get_embedding_client),
 ) -> StreamingResponse:
     settings = get_settings()
     return StreamingResponse(
-        _event_stream(client, settings.llm_model, body),
+        _event_stream(client, settings.llm_model, body, embedding_client),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
