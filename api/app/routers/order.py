@@ -38,7 +38,7 @@ async def confirm_order(
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     conversation = await _conversation_or_404(session, conversation_id)
-    draft = await cart_service.get_active_draft(session, conversation.id)
+    draft = await cart_service.get_active_draft(session, conversation.id, for_update=True)
 
     if draft is None or draft.status != "reviewed":
         raise HTTPException(

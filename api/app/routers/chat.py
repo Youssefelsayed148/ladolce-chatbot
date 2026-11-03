@@ -23,7 +23,7 @@ from collections.abc import AsyncGenerator
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 from openai import AsyncOpenAI
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -55,9 +55,15 @@ GREETING_SUGGESTIONS = [
 ]
 
 
+# Public, unauthenticated endpoint: bound what a single request can cost.
+MAX_MESSAGE_CHARS = 1000
+# Only the most recent messages are sent to the model each turn.
+MAX_HISTORY_MESSAGES = 20
+
+
 class ChatRequest(BaseModel):
     conversation_id: str | None = None
-    message: str = ""
+    message: str = Field(default="", max_length=MAX_MESSAGE_CHARS)
 
 
 def _sse(event: dict) -> str:
@@ -87,13 +93,11 @@ async def _load_history(session: AsyncSession, conversation_id: int) -> list[dic
         select(Message)
         .where(Message.conversation_id == conversation_id)
         .where(Message.role.in_(("user", "assistant")))
-        .order_by(Message.id)
+        .order_by(Message.id.desc())
+        .limit(MAX_HISTORY_MESSAGES)
     )
-    return [
-        {"role": m.role, "content": m.content}
-        for m in result.scalars().all()
-        if m.content
-    ]
+    messages = reversed(result.scalars().all())
+    return [{"role": m.role, "content": m.content} for m in messages if m.content]
 
 
 async def _plate_sizes_context(session: AsyncSession) -> str:

@@ -62,16 +62,20 @@ class ToolResult:
 # Draft + lookups
 # --------------------------------------------------------------------------- #
 async def get_active_draft(
-    session: AsyncSession, conversation_id: int
+    session: AsyncSession, conversation_id: int, for_update: bool = False
 ) -> CartDraft | None:
     """The most recent open draft (building or reviewed), or None. Does not
-    create - a confirmed/abandoned draft is terminal."""
-    result = await session.execute(
+    create - a confirmed/abandoned draft is terminal. `for_update` row-locks the
+    draft (Postgres) so concurrent confirms can't both pass the status check."""
+    query = (
         select(CartDraft)
         .where(CartDraft.conversation_id == conversation_id)
         .where(CartDraft.status.in_(("building", "reviewed")))
         .order_by(CartDraft.id.desc())
     )
+    if for_update:
+        query = query.with_for_update()
+    result = await session.execute(query)
     return result.scalars().first()
 
 

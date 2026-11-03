@@ -246,3 +246,8 @@ async def test_chat_suggestions_block_present_on_second_turn(client, use_fake_op
     )
     assert second[-1]["type"] == "suggestions_block"
     assert len(second[-1]["suggestions"]) > 0
+
+
+async def test_chat_rejects_oversized_message(client):
+    resp = await client.post("/api/chat", json={"message": "x" * 1001})
+    assert resp.status_code == 422

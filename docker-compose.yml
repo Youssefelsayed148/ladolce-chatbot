@@ -21,9 +21,10 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
-    # Exposed on localhost only for dev inspection; remove on the VPS if not needed.
+    # Bound to localhost only (dev inspection); never reachable from outside the
+    # host. Remove entirely on the VPS if not needed.
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
 
   api:
     build: ./api
