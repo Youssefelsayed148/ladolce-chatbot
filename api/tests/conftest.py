@@ -317,3 +317,14 @@ def use_fake_openai():
 async def db_session():
     async with get_sessionmaker()() as session:
         yield session
+
+
+@pytest.fixture(autouse=True)
+def _no_live_store_quote(monkeypatch):
+    """Never hit the real store from tests; review falls back to the local price."""
+    from app.services import store_quote
+
+    async def _none(*a, **k):
+        return None
+
+    monkeypatch.setattr(store_quote, "quote_box", _none)

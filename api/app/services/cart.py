@@ -13,6 +13,7 @@ Pricing model (see the Phase 2 ambiguities note in the handoff):
 Prices are snapshotted onto cart_items at add-time.
 """
 
+import logging
 from dataclasses import dataclass
 
 from sqlalchemy import select
@@ -23,10 +24,17 @@ from app.models import (
     CartDraft,
     CartItem,
     CartPlateContent,
+    Finish,
     PlateSize,
     Product,
     ProductSlotCost,
 )
+
+from app.services import store_quote
+
+logger = logging.getLogger("app.cart")
+
+MAX_GIFT_MESSAGE_CHARS = 180
 
 
 class CartError(Exception):
@@ -133,6 +141,7 @@ async def _get_plate_item(session: AsyncSession, draft_id: int, cart_item_id: in
         .where(CartItem.cart_draft_id == draft_id)
         .options(
             selectinload(CartItem.plate_size),
+            selectinload(CartItem.finish),
             selectinload(CartItem.plate_contents).selectinload(CartPlateContent.product),
         )
         .execution_options(populate_existing=True)
@@ -145,6 +154,35 @@ async def _get_plate_item(session: AsyncSession, draft_id: int, cart_item_id: in
 
 def _plate_slots_used(item: CartItem) -> int:
     return sum(c.slots_used for c in item.plate_contents)
+
+
+def _is_store_plate(item: CartItem) -> bool:
+    return bool(item.plate_size and item.plate_size.store_canvas_id)
+
+
+def _plate_grams_used(item: CartItem) -> int:
+    return sum((c.product.weight_grams or 0) * c.quantity for c in item.plate_contents if c.product)
+
+
+def _plate_limits(item: CartItem) -> dict:
+    """Store-box limits + usage (pieces and grams). Pieces == slots_used."""
+    plate = item.plate_size
+    pieces, grams = _plate_slots_used(item), _plate_grams_used(item)
+    return {
+        "pieces_used": pieces,
+        "pieces_total": plate.max_pieces,
+        "grams_used": grams,
+        "grams_total": plate.capacity_grams,
+        "remaining_pieces": plate.max_pieces - pieces,
+        "remaining_grams": plate.capacity_grams - grams,
+    }
+
+
+def bespoke_items_payload(item: CartItem) -> list[dict]:
+    """Store `items` lines ({dateId, quantity<=99}) for a custom box."""
+    return store_quote.split_items(
+        [(c.product.store_date_id, c.quantity) for c in item.plate_contents if c.product]
+    )
 
 
 def _plate_line_total(item: CartItem) -> float:
@@ -247,16 +285,37 @@ async def add_item_to_plate(
         raise CartError("Quantity must be at least 1.")
     item = await _get_plate_item(session, draft.id, cart_item_id)
     product = await _get_product(session, product_id)
-    if product.price is None:
+    store_plate = _is_store_plate(item)
+    if store_plate:
+        if not product.store_date_id or not product.weight_grams:
+            raise CartError(
+                f"'{product.name}' cannot go into a custom box - only individual date "
+                "varieties can."
+            )
+    elif product.price is None:
         raise CartError(f"'{product.name}' has no price and can't be added to a plate.")
     capacity = item.plate_size.capacity
     _revert_to_building(draft)
 
-    slot_cost = await _get_slot_cost(session, product_id)
+    if store_plate:
+        lim = _plate_limits(item)
+        add_g = product.weight_grams * quantity
+        if quantity > lim["remaining_pieces"] or add_g > lim["remaining_grams"]:
+            raise CapacityExceeded(
+                f"That won't fit: the {item.plate_size.name} holds "
+                f"{lim['pieces_total']} pieces / {lim['grams_total']}g, "
+                f"{lim['pieces_used']} pieces / {lim['grams_used']}g are used, and adding "
+                f"{quantity}x '{product.name}' needs {quantity} pieces / {add_g}g.",
+                **lim,
+                requested_pieces=quantity,
+                requested_grams=add_g,
+            )
+
+    slot_cost = 1 if store_plate else await _get_slot_cost(session, product_id)
     added_slots = slot_cost * quantity
     used = _plate_slots_used(item)
 
-    if used + added_slots > capacity:
+    if not store_plate and used + added_slots > capacity:
         raise CapacityExceeded(
             f"That won't fit: the {item.plate_size.name} holds {capacity} slots, "
             f"{used} are used, and adding {quantity}x '{product.name}' needs "
@@ -277,7 +336,8 @@ async def add_item_to_plate(
                 product_id=product_id,
                 quantity=quantity,
                 slots_used=added_slots,
-                unit_price=float(product.price),  # snapshot filling price at add-time
+                # Store boxes are priced by canvas only; dates add nothing.
+                unit_price=0.0 if store_plate else float(product.price),  # snapshot at add-time
             )
         )
     else:
@@ -297,6 +357,7 @@ async def add_item_to_plate(
             "capacity_used": _plate_slots_used(item),
             "capacity_total": capacity,
             "plate_price": _plate_line_total(item),
+            **(_plate_limits(item) if store_plate else {}),
         },
         ui_blocks=[block],
     )
@@ -331,6 +392,44 @@ async def remove_item_from_plate(
     )
 
 
+async def set_finish(
+    session: AsyncSession, draft: CartDraft, cart_item_id: int, finish_id: int
+) -> ToolResult:
+    item = await _get_plate_item(session, draft.id, cart_item_id)
+    finish = await session.get(Finish, finish_id)
+    if finish is None:
+        raise NotFound(f"No such ribbon finish (id={finish_id}).")
+    _revert_to_building(draft)
+    item.finish_id = finish.id
+    await session.commit()
+    item = await _get_plate_item(session, draft.id, cart_item_id)
+    return ToolResult(
+        data={"cart_item_id": item.id, "finish": finish.name_en},
+        ui_blocks=[await build_plate_builder_block(session, item)],
+    )
+
+
+async def set_gift_message(
+    session: AsyncSession, draft: CartDraft, cart_item_id: int, message: str
+) -> ToolResult:
+    item = await _get_plate_item(session, draft.id, cart_item_id)
+    message = (message or "").strip()
+    if len(message) > MAX_GIFT_MESSAGE_CHARS:
+        raise CartError(
+            f"The gift message is {len(message)} characters; the limit is "
+            f"{MAX_GIFT_MESSAGE_CHARS}. Please shorten it.",
+            max_chars=MAX_GIFT_MESSAGE_CHARS,
+        )
+    _revert_to_building(draft)
+    item.gift_message = message or None
+    await session.commit()
+    item = await _get_plate_item(session, draft.id, cart_item_id)
+    return ToolResult(
+        data={"cart_item_id": item.id, "gift_message": item.gift_message},
+        ui_blocks=[await build_plate_builder_block(session, item)],
+    )
+
+
 # --------------------------------------------------------------------------- #
 # State / serialization
 # --------------------------------------------------------------------------- #
@@ -348,6 +447,7 @@ async def _load_items(session: AsyncSession, draft_id: int) -> list[CartItem]:
         .options(
             selectinload(CartItem.product).selectinload(Product.category),
             selectinload(CartItem.plate_size),
+            selectinload(CartItem.finish),
             selectinload(CartItem.plate_contents).selectinload(CartPlateContent.product),
         )
         .order_by(CartItem.id)
@@ -397,7 +497,18 @@ async def build_plate_builder_block(session: AsyncSession, item: CartItem) -> di
             ],
             "base_price": float(item.unit_price),
             "price": _plate_line_total(item),  # base + fillings
+            **_box_extras(item),
         },
+    }
+
+
+def _box_extras(item: CartItem) -> dict:
+    if not _is_store_plate(item):
+        return {}
+    return {
+        **_plate_limits(item),
+        "finish": item.finish.name_en if item.finish else None,
+        "gift_message": item.gift_message,
     }
 
 
@@ -433,6 +544,7 @@ def _serialize_item(item: CartItem) -> dict:
         "base_price": float(item.unit_price),
         "unit_price": float(item.unit_price),
         "line_total": float(item.line_total),
+        **_box_extras(item),
     }
 
 
@@ -467,9 +579,27 @@ async def request_review(session: AsyncSession, draft: CartDraft) -> ToolResult:
     if not items:
         raise CartError("The cart is empty - add something before reviewing.")
 
+    for item in items:
+        if item.item_type != "custom_plate" or not _is_store_plate(item):
+            continue
+        name = item.plate_size.name
+        if not item.plate_contents:
+            raise CartError(f"The {name} is empty - add dates to it before reviewing.")
+        if item.finish_id is None:
+            raise CartError(f"Choose a ribbon finish for the {name} before reviewing.")
+        total = await store_quote.quote_box(
+            item.plate_size.store_canvas_id,
+            bespoke_items_payload(item),
+            item.finish.store_finish_id,
+        )
+        if total is None:
+            logger.warning("quote_fallback_local_price", extra={"cart_item_id": item.id})
+            total = float(item.plate_size.base_price)
+        item.line_total = total
+
     if draft.status != "reviewed":
         draft.status = "reviewed"
-        await session.commit()
+    await session.commit()
 
     return ToolResult(
         data={"reviewed": True, "cart_draft_id": draft.id, "status": "reviewed"},

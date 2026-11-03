@@ -273,7 +273,7 @@ def test_all_tools_have_additional_properties_false():
     """Open models tend to invent extra parameters if not explicitly forbidden.
     Every tool schema should declare additionalProperties: False.
     """
-    assert len(ALL_TOOLS) == 9
+    assert len(ALL_TOOLS) == 11
     for tool in ALL_TOOLS:
         params = tool["function"]["parameters"]
         assert params.get("type") == "object"

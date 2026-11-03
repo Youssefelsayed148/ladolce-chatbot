@@ -31,7 +31,7 @@ from app.core.config import get_settings
 from app.core.db import get_sessionmaker
 from app.core.limiter import chat_rate_limit, limiter
 from app.deps import get_embedding_client, get_openai_client
-from app.models import Conversation, Message
+from app.models import Conversation, Finish, Message
 from app.services import cart as cart_service
 from app.services import catalog as catalog_service
 from app.services.chat import generate_chat_events
@@ -107,10 +107,24 @@ async def _plate_sizes_context(session: AsyncSession) -> str:
     if not sizes:
         return ""
     lines = [
-        f"  - id={s.id}: {s.name} (holds {s.capacity} slots, base price {float(s.base_price)})"
+        (
+            f"  - id={s.id}: {s.name} (max {s.max_pieces} pieces and {s.capacity_grams}g "
+            f"total, price {float(s.base_price)} AED)"
+            if s.store_canvas_id
+            else f"  - id={s.id}: {s.name} (holds {s.capacity} slots, base price {float(s.base_price)})"
+        )
         for s in sizes
     ]
     return "Available custom box/tray plate sizes:\n" + "\n".join(lines)
+
+
+async def _finishes_context(session: AsyncSession) -> str:
+    """Ribbon finishes (with ids) for the set_finish tool."""
+    finishes = (await session.execute(select(Finish).order_by(Finish.sort_order))).scalars().all()
+    if not finishes:
+        return ""
+    lines = [f"  - id={f.id}: {f.name_en}" for f in finishes]
+    return "Ribbon finishes for custom boxes (free):\n" + "\n".join(lines)
 
 
 async def _categories_context(session: AsyncSession) -> str:
@@ -143,6 +157,7 @@ async def _event_stream(
             note
             for note in (
                 await _plate_sizes_context(session),
+                await _finishes_context(session),
                 await _categories_context(session),
             )
             if note

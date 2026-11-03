@@ -230,10 +230,14 @@ class CartItem(Base):
     # price edits never retroactively change an in-progress cart.
     unit_price: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
     line_total: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
+    # Custom boxes only: ribbon finish and optional gift message (<= 180 chars).
+    finish_id: Mapped[int | None] = mapped_column(ForeignKey("finishes.id"), nullable=True)
+    gift_message: Mapped[str | None] = mapped_column(String(180), nullable=True)
 
     cart_draft: Mapped["CartDraft"] = relationship(back_populates="items")
     product: Mapped["Product | None"] = relationship()
     plate_size: Mapped["PlateSize | None"] = relationship()
+    finish: Mapped["Finish | None"] = relationship()
     plate_contents: Mapped[list["CartPlateContent"]] = relationship(
         back_populates="cart_item",
         cascade="all, delete-orphan",

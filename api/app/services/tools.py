@@ -180,6 +180,46 @@ REMOVE_ITEM_FROM_PLATE_TOOL = {
     },
 }
 
+SET_FINISH_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "set_finish",
+        "description": (
+            "Choose the ribbon finish for a custom box (ids are listed in context). "
+            "Required before the order can be reviewed."
+        ),
+        "parameters": {
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "cart_item_id": {"type": "integer", "description": "The custom box's cart_item_id."},
+                "finish_id": {"type": "integer"},
+            },
+            "required": ["cart_item_id", "finish_id"],
+        },
+    },
+}
+
+SET_GIFT_MESSAGE_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "set_gift_message",
+        "description": (
+            "Set (or clear, with an empty string) the optional gift message printed "
+            "with a custom box. Maximum 180 characters."
+        ),
+        "parameters": {
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "cart_item_id": {"type": "integer"},
+                "message": {"type": "string", "maxLength": 180},
+            },
+            "required": ["cart_item_id", "message"],
+        },
+    },
+}
+
 ADD_SINGLE_PRODUCT_TOOL = {
     "type": "function",
     "function": {
@@ -250,6 +290,8 @@ ALL_TOOLS = [
     START_PLATE_TOOL,
     ADD_ITEM_TO_PLATE_TOOL,
     REMOVE_ITEM_FROM_PLATE_TOOL,
+    SET_FINISH_TOOL,
+    SET_GIFT_MESSAGE_TOOL,
     ADD_SINGLE_PRODUCT_TOOL,
     GET_CART_SUMMARY_TOOL,
     REQUEST_REVIEW_TOOL,
@@ -344,6 +386,16 @@ async def dispatch_tool(
         if name == "remove_item_from_plate":
             return await cart_service.remove_item_from_plate(
                 session, draft, int(args["cart_item_id"]), int(args["product_id"])
+            )
+
+        if name == "set_finish":
+            return await cart_service.set_finish(
+                session, draft, int(args["cart_item_id"]), int(args["finish_id"])
+            )
+
+        if name == "set_gift_message":
+            return await cart_service.set_gift_message(
+                session, draft, int(args["cart_item_id"]), str(args.get("message", ""))
             )
 
         if name == "get_cart_summary":
