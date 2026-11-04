@@ -10,6 +10,7 @@ the model only narrates authoritative results (design doc section 5).
 inject a fake client that emits canned streams.
 """
 
+import asyncio
 import json
 import logging
 import re
@@ -19,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.models import CartDraft, Conversation
+from app.services.suggestions import rule_suggestions
 from app.services.tools import ALL_TOOLS, dispatch_tool, parse_tool_args
 
 logger = logging.getLogger("app.chat")
@@ -51,6 +53,14 @@ SYSTEM_PROMPT = (
     "date varieties go in a box. For every custom box also ask which ribbon finish "
     "they would like (set_finish - required before review) and offer an optional "
     "gift message of at most 180 characters (set_gift_message).\n\n"
+    "FORMATTING: the chat window is narrow. Never use markdown tables or ASCII "
+    "tables, and never paste raw lists of prices or sizes - the interface shows "
+    "products, box sizes and the box contents as cards. Whenever the guest asks "
+    "about box/tray sizes or wants to build a custom box, call list_plate_sizes and "
+    "then reply with ONE or TWO short sentences (the cards show the details); after "
+    "search_products/recommend_items, give a one-line lead-in only. Use short "
+    "paragraphs and, when you must list, a short bulleted list with bold names. "
+    "Keep replies under about 80 words.\n\n"
     "Call tools silently: write NO text before or between tool calls, only one reply "
     "after all tools are done. You only collect the order - payment and checkout "
     "happen on the store's own checkout page after the guest taps Review Order; "
@@ -96,6 +106,10 @@ SYSTEM_PROMPT = (
 
 MAX_SUGGESTIONS = 3
 
+# The fallback LLM call must never hold the stream open for long: the guest's
+# composer stays usable once the reply is done, and chips are best-effort.
+SUGGESTIONS_TIMEOUT_S = 6
+
 # Phase 6: a cheap follow-up completion (approach (a) from the design note -
 # preferred over a rule-based tool->suggestion mapping because this is a
 # luxury-concierge experience where relevant, well-phrased suggestions matter
@@ -136,18 +150,23 @@ async def generate_suggestions(client, model: str, user_text: str, reply_text: s
     malformed model output) degrades to an empty list so a suggestion hiccup
     never breaks the chat response."""
     try:
-        stream = await client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": SUGGESTIONS_SYSTEM_PROMPT},
-                {"role": "user", "content": f"Guest: {user_text}\nConcierge: {reply_text}"},
-            ],
-            stream=True,
-        )
-        content = ""
-        async for kind, payload in _consume_stream(stream):
-            if kind == "final":
-                content = payload["content"]
+        async def _call() -> str:
+            stream = await client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": SUGGESTIONS_SYSTEM_PROMPT},
+                    {"role": "user", "content": f"Guest: {user_text}\nConcierge: {reply_text}"},
+                ],
+                stream=True,
+                max_tokens=200,
+            )
+            out = ""
+            async for kind, payload in _consume_stream(stream):
+                if kind == "final":
+                    out = payload["content"]
+            return out
+
+        content = await asyncio.wait_for(_call(), timeout=SUGGESTIONS_TIMEOUT_S)
 
         data = json.loads(_extract_json_array(content))
         if not isinstance(data, list):
@@ -319,11 +338,14 @@ async def generate_chat_events(
         "ui_blocks": ui_blocks,
     }
 
-    suggestions = (
-        await generate_suggestions(client, model, user_text, reply_text)
-        if get_settings().suggestions_enabled
-        else []
-    )
+    suggestions: list[str] = []
+    if get_settings().suggestions_enabled:
+        tool_names = [c["name"] for c in made_tool_calls]
+        suggestions = rule_suggestions(user_text, tool_names, ui_blocks)
+        if not suggestions and not any(
+            c["name"] == "request_review" for c in made_tool_calls
+        ):
+            suggestions = await generate_suggestions(client, model, user_text, reply_text)
     yield {"type": "suggestions_block", "suggestions": suggestions}
 
 

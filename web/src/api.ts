@@ -171,8 +171,19 @@ export interface ReviewButtonData {
   cart_draft_id: number;
 }
 
+export interface PlateSizeOption {
+  plate_size_id: number;
+  name: string;
+  kind: string | null;
+  max_pieces: number;
+  capacity_grams: number | null;
+  price: number;
+  image_url: string | null;
+}
+
 export type UiBlock =
   | { type: "product_card"; data: ProductCardData }
+  | { type: "plate_size_options"; data: { sizes: PlateSizeOption[] } }
   | { type: "plate_builder"; data: PlateBuilderData }
   | { type: "review_order_button"; data: ReviewButtonData };
 

@@ -1,4 +1,5 @@
 import Markdown, { type Components } from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { colors, fonts, radius, space, motion } from "../theme/tokens";
 
 export interface ChatMessage {
@@ -54,7 +55,7 @@ export default function MessageBubble({ message }: { message: ChatMessage }) {
         {isUser ? (
           message.text
         ) : (
-          <Markdown components={markdownComponents}>{message.text}</Markdown>
+          <Markdown remarkPlugins={[remarkGfm]} components={markdownComponents}>{message.text}</Markdown>
         )}
         {message.streaming && <span className="lds-caret" aria-hidden />}
         {message.error && message.text === "" && (
@@ -87,6 +88,29 @@ const markdownComponents: Components = {
     </ol>
   ),
   li: ({ children }) => <li style={{ margin: `${space.xs / 2}px 0` }}>{children}</li>,
+  // Safety net: if the model still emits a GFM table, show it as a compact
+  // scrollable table instead of raw pipe characters.
+  table: ({ children }) => (
+    <div style={{ overflowX: "auto", margin: `${space.xs}px 0` }}>
+      <table style={{ borderCollapse: "collapse", fontSize: 12, width: "100%" }}>{children}</table>
+    </div>
+  ),
+  th: ({ children }) => (
+    <th
+      style={{
+        textAlign: "left",
+        padding: "4px 8px",
+        borderBottom: `1px solid ${colors.border}`,
+        fontWeight: 700,
+        whiteSpace: "nowrap",
+      }}
+    >
+      {children}
+    </th>
+  ),
+  td: ({ children }) => (
+    <td style={{ padding: "4px 8px", borderBottom: `1px solid ${colors.divider}` }}>{children}</td>
+  ),
   a: ({ children, href }) => (
     <a href={href} target="_blank" rel="noreferrer" style={{ color: colors.darkGreen }}>
       {children}

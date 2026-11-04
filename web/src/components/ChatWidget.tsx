@@ -13,6 +13,7 @@ import MessageList from "./MessageList";
 import type { ChatMessage } from "./MessageBubble";
 import ProductCard, { ProductCardSkeleton } from "./ProductCard";
 import PlateBuilderCard from "./PlateBuilderCard";
+import PlateSizeOptionsCard from "./PlateSizeOptionsCard";
 import OrderSummaryCard from "./OrderSummaryCard";
 import ConfirmCheckoutButton from "./ConfirmCheckoutButton";
 import SuggestionChips from "./SuggestionChips";
@@ -141,6 +142,10 @@ export default function ChatWidget() {
           }
           break;
         case "done":
+          // The visible reply is complete; only the chips are still to come, so
+          // free the composer now instead of waiting for the stream to close.
+          setThinking(false);
+          setSending(false);
           if (assistantId) {
             setCardsLoading((prev) => ({ ...prev, [assistantId]: false }));
             patchAssistant(assistantId, (m) => ({
@@ -180,6 +185,7 @@ export default function ChatWidget() {
         { id: assistantId, role: "assistant", text: "", streaming: true },
       ]);
       setInput("");
+      setSuggestions([]); // no stale chips while the next reply (and its chips) are on the way
       setSending(true);
       setThinking(true);
 
@@ -234,6 +240,15 @@ export default function ChatWidget() {
               data={block.data}
               imageUrl={pid != null ? productImages[pid] : null}
               onAdd={(name) => void send(`I'd like to add ${name} to my order, please.`)}
+            />
+          );
+        }
+        if (block.type === "plate_size_options") {
+          return (
+            <PlateSizeOptionsCard
+              key={`${messageId}-${i}`}
+              sizes={block.data.sizes}
+              onChoose={(name) => void send(`I'd like to build a custom box in ${name}.`)}
             />
           );
         }

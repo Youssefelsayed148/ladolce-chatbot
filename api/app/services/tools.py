@@ -122,6 +122,20 @@ RECOMMEND_ITEMS_TOOL = {
     },
 }
 
+LIST_PLATE_SIZES_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "list_plate_sizes",
+        "description": (
+            "Show the guest the custom box/tray sizes (capacity in pieces and grams, "
+            "price) as tappable cards. Call this whenever they ask what sizes/boxes/"
+            "trays exist, want to build a custom box, or compare box sizes. The cards "
+            "display everything - do not repeat the list in your reply."
+        ),
+        "parameters": {"type": "object", "additionalProperties": False, "properties": {}},
+    },
+}
+
 START_PLATE_TOOL = {
     "type": "function",
     "function": {
@@ -292,6 +306,7 @@ SEARCH_KNOWLEDGE_BASE_TOOL = {
 ALL_TOOLS = [
     SEARCH_PRODUCTS_TOOL,
     RECOMMEND_ITEMS_TOOL,
+    LIST_PLATE_SIZES_TOOL,
     START_PLATE_TOOL,
     ADD_ITEM_TO_PLATE_TOOL,
     REMOVE_ITEM_FROM_PLATE_TOOL,
@@ -369,6 +384,13 @@ async def dispatch_tool(
                 ui_blocks=[_product_card_from_row(r) for r in rows],
             )
 
+        if name == "list_plate_sizes":
+            sizes = [_plate_size_option(p) for p in await catalog_service.list_plate_sizes(session)]
+            return cart_service.ToolResult(
+                data={"plate_sizes": sizes},
+                ui_blocks=[{"type": "plate_size_options", "data": {"sizes": sizes}}] if sizes else [],
+            )
+
         if name == "add_single_product":
             return await cart_service.add_single_product(
                 session,
@@ -427,6 +449,21 @@ async def dispatch_tool(
             extra={"tool": name, "error": exc.message, "conversation_id": conversation.session_token},
         )
         return cart_service.ToolResult(data=exc.as_result(), ui_blocks=[])
+
+
+def _plate_size_option(plate) -> dict:
+    """One box/tray size for the size-picker card. Store boxes are limited by
+    pieces AND grams; legacy plates only have a slot capacity."""
+    is_store = bool(plate.store_canvas_id)
+    return {
+        "plate_size_id": plate.id,
+        "name": plate.name,
+        "kind": plate.kind,
+        "max_pieces": plate.max_pieces if is_store else plate.capacity,
+        "capacity_grams": plate.capacity_grams if is_store else None,
+        "price": float(plate.base_price),
+        "image_url": plate.image_url,
+    }
 
 
 def _product_card_from_row(row: dict) -> dict:
