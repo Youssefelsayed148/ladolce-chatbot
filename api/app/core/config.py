@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     # Client store API (read-only catalog sync / quotes).
     store_api_base: str = Field(default="https://ladolce.theosirislabs.com")
 
+    # Checkout display: VAT is added on top of the subtotal (seen on the shop:
+    # 990 + 49.5 = 1040). Shipping and promo codes are left to the store.
+    vat_rate: float = Field(default=0.05)
+
     # Where the guest finishes the order (the store's own checkout page).
     store_checkout_url: str = Field(default="https://ladolcesaveur.com/checkout")
 

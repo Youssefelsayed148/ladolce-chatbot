@@ -76,6 +76,9 @@ async def test_review_endpoint_returns_accurate_totals(client, cart_ready):
 
     assert summary["status"] == "reviewed"
     assert summary["total_price"] == cart_ready["expected_total"]
+    # Reads like the shop's checkout: subtotal, 5% VAT on top, shipping/promo at checkout.
+    assert summary["totals"]["subtotal"] == 398.0
+    assert summary["totals"]["vat"] == 19.9 and summary["totals"]["total_with_vat"] == 417.9
 
     # Line totals sum to the grand total.
     assert round(sum(i["line_total"] for i in summary["items"]), 2) == summary["total_price"]
