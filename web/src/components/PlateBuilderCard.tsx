@@ -79,7 +79,15 @@ export default function PlateBuilderCard({
               marginBottom: 6,
             }}
           >
-            <span>{full ? "Box is full" : "Slots filled"}</span>
+            <span>
+              {full
+                ? "Box is full"
+                : data.remaining_pieces != null
+                  ? `${data.remaining_pieces} pieces${
+                      data.remaining_grams != null ? ` · ${data.remaining_grams}g` : ""
+                    } left`
+                  : "Slots filled"}
+            </span>
             <span style={{ fontWeight: 600, color: colors.darkGreen }}>
               {used} / {total}
             </span>
