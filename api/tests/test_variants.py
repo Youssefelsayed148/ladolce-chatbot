@@ -115,3 +115,26 @@ async def test_price_zero_variant_is_blocked(shop):
         d = await _d(s, shop)
         with pytest.raises(cart_service.CartError):
             await cart_service.add_single_product(s, d, shop["p"], 1, free.id)
+
+
+async def test_wrong_category_name_still_finds_product(shop):
+    """A guessed category ("Stuffed Dates" vs the real "Stuffed & Flavored Dates")
+    must not hide a product the name search would find."""
+    async with get_sessionmaker()() as s:
+        rows = await catalog_service.search_products(s, "Khudri Almond", category="Stuffed & Flavored")
+        assert [r["name"] for r in rows] == ["Khudri Almond"]
+
+
+async def test_start_plate_reuses_empty_box_of_same_size(shop):
+    from app.models import PlateSize
+
+    async with get_sessionmaker()() as s:
+        plate = PlateSize(name="Mini", capacity=10, capacity_grams=200, base_price=50)
+        s.add(plate)
+        await s.commit()
+        d = await _d(s, shop)
+        first = await cart_service.start_plate(s, d, plate.id)
+        again = await cart_service.start_plate(s, d, plate.id)
+        assert again.data["cart_item_id"] == first.data["cart_item_id"]
+        state = await cart_service.get_cart_state_by_draft(s, d)
+        assert len(state["items"]) == 1

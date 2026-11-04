@@ -304,6 +304,26 @@ async def start_plate(
         raise NotFound(f"No such plate size (id={plate_size_id}).")
     _revert_to_building(draft)
 
+    # Reuse an untouched box of this size rather than stacking empty duplicates
+    # (the model sometimes calls start_plate again instead of using cart_item_id).
+    for existing in await _load_items(session, draft.id):
+        if (
+            existing.item_type == "custom_plate"
+            and existing.plate_size_id == plate_size_id
+            and not existing.plate_contents
+        ):
+            existing = await _get_plate_item(session, draft.id, existing.id)
+            return ToolResult(
+                data={
+                    "cart_item_id": existing.id,
+                    "plate_size": plate.name,
+                    "capacity_total": plate.capacity,
+                    "capacity_used": 0,
+                    "price": float(existing.unit_price),
+                },
+                ui_blocks=[await build_plate_builder_block(session, existing)],
+            )
+
     base_price = float(plate.base_price)
     item = CartItem(
         cart_draft_id=draft.id,

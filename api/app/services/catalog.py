@@ -130,20 +130,28 @@ async def search_products(
     concierge sees (and can present) all of them instead of guessing which
     the guest meant - "server is authoritative, don't guess" applies to
     disambiguation, not just pricing/capacity math."""
-    stmt = select(Product).where(Product.is_active.is_(True))
-
     term = (query or "").strip()
-    if term:
-        like = f"%{term}%"
-        stmt = stmt.where(
-            Product.name.ilike(like) | Product.description.ilike(like)
-        )
-    if category:
-        stmt = stmt.join(Category).where(Category.name == category)
 
-    stmt = stmt.options(selectinload(Product.category), selectinload(Product.variants)).order_by(Product.name).limit(limit)
-    result = await session.execute(stmt)
-    products = list(result.scalars().all())
+    async def _run(cat: str | None) -> list[Product]:
+        stmt = select(Product).where(Product.is_active.is_(True))
+        if term:
+            like = f"%{term}%"
+            stmt = stmt.where(Product.name.ilike(like) | Product.description.ilike(like))
+        if cat:
+            stmt = stmt.join(Category).where(Category.name == cat)
+        stmt = (
+            stmt.options(selectinload(Product.category), selectinload(Product.variants))
+            .order_by(Product.name)
+            .limit(limit)
+        )
+        return list((await session.execute(stmt)).scalars().all())
+
+    products = await _run(category)
+    if not products and category and term:
+        # The model often guesses a category name ("Stuffed Dates" for "Stuffed &
+        # Flavored Dates"); a wrong guess must not hide a product the name finds.
+        category = None
+        products = await _run(None)
 
     if term and not category and products:
         products = products + await _cross_category_siblings(session, products)

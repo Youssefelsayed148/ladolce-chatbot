@@ -127,7 +127,7 @@ START_PLATE_TOOL = {
     "function": {
         "name": "start_plate",
         "description": (
-            "Begin a custom box/tray of a given plate size. Returns the new cart_item_id "
+            "Begin a custom box/tray of a given plate size. Call it ONCE per box; to add to a box that already exists, reuse its cart_item_id. Returns the cart_item_id "
             "(use it for add_item_to_plate) and the plate's capacity and price."
         ),
         "parameters": {
