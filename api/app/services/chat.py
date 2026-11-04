@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.models import CartDraft, Conversation, Finish
 from app.services import cart as cart_service
+from app.services import catalog as catalog_service
 from app.services.suggestions import rule_suggestions
 from app.services.tools import ALL_TOOLS, dispatch_tool, parse_tool_args
 
@@ -51,6 +52,9 @@ _REVIEW_INTENT_RE = re.compile(
 )
 
 
+_BUILD_INTENT_RE = re.compile(r"\b(build|start|make|create|want|like|choose|pick|go with|take)\b", re.IGNORECASE)
+
+
 async def _shortcut_calls(session: AsyncSession, draft: CartDraft, user_text: str) -> list[tuple[str, dict]]:
     """Tool calls the guest's message unambiguously asks for, in order."""
     calls: list[tuple[str, dict]] = []
@@ -58,6 +62,17 @@ async def _shortcut_calls(session: AsyncSession, draft: CartDraft, user_text: st
     plates = [
         i for i in await cart_service._load_items(session, draft.id) if i.item_type == "custom_plate"
     ]
+    if not plates:
+        # Naming a box size (tapping a size card sends "...build a custom box in X")
+        # starts that box, whether or not the model remembers to call start_plate.
+        sizes = await catalog_service.list_plate_sizes(session)
+        wanted = [
+            p for p in sizes
+            if p.name.lower() in text or p.name.split(" (")[0].lower() in text
+        ]
+        if wanted and (_BUILD_INTENT_RE.search(user_text) or len(text.split()) <= 6):
+            best = max(wanted, key=lambda p: len(p.name))
+            calls.append(("start_plate", {"plate_size_id": best.id}))
     if len(plates) == 1:
         finishes = (await session.execute(select(Finish))).scalars().all()
         named = next((f for f in finishes if f.name_en and f.name_en.lower() in text), None)
@@ -98,6 +113,9 @@ SYSTEM_PROMPT = (
     "search_products/recommend_items, give a one-line lead-in only. Use short "
     "paragraphs and, when you must list, a short bulleted list with bold names. "
     "Keep replies under about 80 words.\n\n"
+    "The context lists the current cart (with cart_item_ids) and every date that fits a "
+    "custom box (with product_ids): use those ids exactly, never guess one, and when "
+    "the guest sends only a number it is the quantity for the date just discussed.\n\n"
     "If add_item_to_plate returns an error (e.g. the pieces would be too heavy for "
     "the box's weight limit), tell the guest the exact reason and offer fewer pieces "
     "or a different date or size. NEVER start a new box or 'restart the order' to "

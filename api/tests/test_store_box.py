@@ -247,3 +247,44 @@ async def test_review_without_ribbon_gets_no_button_but_a_real_error_for_the_mod
         sent = fake.chat.completions.calls[0]["messages"]
         tool_msgs = [m for m in sent if m["role"] == "tool"]
         assert "ribbon" in tool_msgs[0]["content"].lower()
+
+
+async def test_cart_and_box_dates_context_carry_ids_between_turns(box):
+    from app.routers.chat import _box_dates_context, _cart_context
+
+    async with get_sessionmaker()() as s:
+        d = await _draft(s, box)
+        await cart_service.add_item_to_plate(s, d, box["item"], box["light"], 3)
+        cart = await _cart_context(s, d)
+        assert f"cart_item_id={box['item']}" in cart
+        assert "Ajwa x3" in cart and "7 pieces" in cart and "ribbon: not chosen" in cart
+        dates = await _box_dates_context(s)
+        assert f"product_id={box['light']}: Ajwa (10g)" in dates
+        assert f"product_id={box['heavy']}: Majdool (20g)" in dates
+        assert "Pack" not in dates  # not a boxable date
+
+
+async def test_naming_a_size_starts_that_box_server_side(prepare_db):
+    from app.models import PlateSize
+    from app.services.chat import generate_chat_events
+    from tests.conftest import FakeOpenAIClient
+
+    async with get_sessionmaker()() as s:
+        s.add(PlateSize(name="Small Round Tray (2kg)", capacity=120, base_price=200,
+                        store_canvas_id="c9", kind="TRAY", capacity_grams=2000, max_pieces=120))
+        s.add(PlateSize(name="The Classic Petite (350g)", capacity=18, base_price=60,
+                        store_canvas_id="c1", kind="BOX", capacity_grams=350, max_pieces=18))
+        conv = Conversation(session_token="t-start")
+        s.add(conv)
+        await s.commit()
+        d = await cart_service.get_or_create_draft(s, conv.id)
+        events = [
+            e async for e in generate_chat_events(
+                s, FakeOpenAIClient("plain"), "m", conv, d, [],
+                "I'd like to build a custom box in Small Round Tray (2kg).",
+            )
+        ]
+        calls = [(e["name"], e["arguments"]) for e in events if e["type"] == "tool_call"]
+        assert [c[0] for c in calls] == ["start_plate"]
+        blocks = [e["block"]["type"] for e in events if e["type"] == "ui_block"]
+        assert blocks == ["plate_builder"]  # box card, not a second set of size cards

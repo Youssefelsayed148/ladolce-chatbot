@@ -231,6 +231,10 @@ export default function ChatWidget() {
           </>
         ) : null;
       }
+      // With a box in progress, "Add" on a date card means "into the box".
+      const boxInProgress = Object.values(blocksByMessage).some((bs) =>
+        bs.some((b) => b.type === "plate_builder")
+      );
       // Each box change emits a fresh box card; only the latest is current.
       const lastPlateIdx = blocks.reduce((acc, b, i) => (b.type === "plate_builder" ? i : acc), -1);
       return blocks.map((block, i) => {
@@ -242,7 +246,13 @@ export default function ChatWidget() {
               key={`${messageId}-${i}`}
               data={block.data}
               imageUrl={pid != null ? productImages[pid] : null}
-              onAdd={(name) => void send(`I'd like to add ${name} to my order, please.`)}
+              onAdd={(name) =>
+                void send(
+                  boxInProgress
+                    ? `I'd like to add ${name} to my box, please.`
+                    : `I'd like to add ${name} to my order, please.`
+                )
+              }
             />
           );
         }
