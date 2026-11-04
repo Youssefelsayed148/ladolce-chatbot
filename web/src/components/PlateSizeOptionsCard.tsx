@@ -34,6 +34,16 @@ export default function PlateSizeOptionsCard({
         maxWidth: 340,
       }}
     >
+      <p
+        style={{
+          margin: `0 0 ${space.xs}px`,
+          fontFamily: fonts.body,
+          fontSize: 12,
+          color: colors.textMuted,
+        }}
+      >
+        Build your own: price depends on the box size, not the dates
+      </p>
       {sizes.map((s) => (
         <SizeRow key={s.plate_size_id} size={s} onChoose={onChoose} />
       ))}

@@ -112,3 +112,28 @@ describe("ProductCard variants", () => {
     expect(onAdd).toHaveBeenCalledWith("Khudri Dates with Almond", data.variants[0]);
   });
 });
+
+describe("ProductCard ready-made box", () => {
+  const royal = {
+    product_id: 5,
+    name: "The Royal Assortment",
+    description: null,
+    price: 450,
+    kind: "ready_made_box",
+    custom_box_same_name: { plate_size_id: 3, name: "Royal Assortment (1000g)", price: 150, note: "n" },
+  };
+
+  it("badges a finished box and points at the custom size with the same name", () => {
+    render(<ProductCard data={royal} />);
+    expect(screen.getByText("Ready-made box")).toBeInTheDocument();
+    expect(screen.getByText("450 AED")).toBeInTheDocument();
+    expect(
+      screen.getByText("Or build your own in this size: 150 AED (price by size)")
+    ).toBeInTheDocument();
+  });
+
+  it("shows no badge for an ordinary shop product", () => {
+    render(<ProductCard data={{ ...royal, kind: "shop_product", custom_box_same_name: undefined }} />);
+    expect(screen.queryByText("Ready-made box")).not.toBeInTheDocument();
+  });
+});
