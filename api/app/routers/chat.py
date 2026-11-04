@@ -166,7 +166,17 @@ async def _cart_context(session: AsyncSession, draft) -> str:
                 f"ribbon: {it.get('finish') or 'not chosen'}; contents: {contents}"
             )
         else:
-            lines.append(f"  - {it['name']} x{it['quantity']} (cart_item_id={it['cart_item_id']})")
+            label = f" ({it['variant_label']})" if it.get("variant_label") else ""
+            lines.append(
+                f"  - {it['name']}{label} x{it['quantity']}, {it['line_total']} AED "
+                f"(cart_item_id={it['cart_item_id']})"
+            )
+    t = state["totals"]
+    lines.append(
+        f"  Totals: subtotal {t['subtotal']} AED + VAT {round(t['vat_rate'] * 100)}% "
+        f"{t['vat']} AED = {t['total_with_vat']} AED before shipping and promo "
+        "(shipping and promo codes are applied at checkout)."
+    )
     return (
         "Current cart (use these cart_item_ids; keep adding to the existing box, never "
         "start another one unless the guest asks for a second box):\n" + "\n".join(lines)
