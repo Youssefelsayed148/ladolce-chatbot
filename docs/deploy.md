@@ -13,6 +13,7 @@
 docker compose up -d --build
 docker compose run --rm -w /db api alembic upgrade head
 docker compose run --rm api python scripts/seed_catalog.py
+docker compose run --rm api python scripts/sync_store_catalog.py --apply   # always after seed
 docker compose run --rm api python scripts/ingest_kb.py
 ```
 
@@ -36,6 +37,11 @@ Restore: `gunzip -c file.sql.gz | docker compose exec -T db psql -U ladolce lado
 ## 5. Switching the chat model
 Edit `LLM_API_BASE`, `LLM_API_KEY`, `LLM_MODEL` in `.env`, then
 `docker compose up -d api`. No code change. Embeddings are unaffected.
+
+Provider note: OpenCode Go (`https://opencode.ai/zen/go/v1`) rejected server-side
+calls in testing (`400 MissingSessionID`: it expects its own client's
+`x-opencode-session` header). Use OpenAI or OpenRouter
+(`https://openrouter.ai/api/v1`) for the server.
 
 ## 6. Smoke test after deploy
 `curl https://YOUR_DOMAIN/api/health`, then one real chat + review + confirm.
