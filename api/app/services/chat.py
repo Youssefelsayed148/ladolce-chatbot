@@ -31,6 +31,13 @@ MAX_REPLY_TOKENS = 1500
 
 MAX_TOOL_ROUNDS = 6
 
+# Box-size questions must always get the size cards, even when a weaker model
+# answers in prose without calling list_plate_sizes (observed with gpt-4o-mini).
+_SIZE_INTENT_RE = re.compile(
+    r"\b(sizes?|trays?|custom box|(build|make|create|design)\b.*\bbox|boxes come in)\b",
+    re.IGNORECASE,
+)
+
 SYSTEM_PROMPT = (
     "You are the concierge for La Dolce Saveur, a luxury patisserie specialising in "
     "gourmet dates, stuffed dates, date pastes, and elegant gift boxes and trays. "
@@ -334,6 +341,17 @@ async def generate_chat_events(
             if kind == "token":
                 reply_parts.append(payload)
                 yield {"type": "token", "text": payload}
+
+    if _SIZE_INTENT_RE.search(user_text) and not any(
+        c["name"] in ("list_plate_sizes", "start_plate", "add_item_to_plate") for c in made_tool_calls
+    ):
+        made_tool_calls.append({"name": "list_plate_sizes", "arguments": {}})
+        result = await dispatch_tool(
+            session, client, conversation, draft, "list_plate_sizes", {}, embedding_client
+        )
+        for block in result.ui_blocks:
+            ui_blocks.append(block)
+            yield {"type": "ui_block", "block": block}
 
     reply_text = "".join(reply_parts)
     yield {
