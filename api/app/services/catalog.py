@@ -8,7 +8,7 @@ invents catalog data.
 
 import re
 
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -28,6 +28,55 @@ from app.models import Category, PlateSize, Product
 # regex strips the parenthetical weight tag so all of a variety's rows
 # normalize to the same key regardless of which one was actually matched.
 _VARIANT_SUFFIX_RE = re.compile(r"\s*\(\d+(?:\.\d+)?\s*(?:g|kg)\)\s*$", re.IGNORECASE)
+
+
+# Box fillings: individual dates priced per piece. They exist only to fill a
+# custom box (shown with weight, no price) and are never shop products.
+FILLING_CATEGORY = "Individual Dates"
+
+
+def is_filling(p: Product) -> bool:
+    """True for a box filling. `p.category` must be loaded (None counts as no
+    category, so a product with only a store_date_id is still a filling)."""
+    if p.store_date_id is not None:
+        return True
+    # A product linked to a store product is sold in the shop, whatever its
+    # (legacy) category says.
+    return bool(
+        p.store_product_id is None and p.category and p.category.name == FILLING_CATEGORY
+    )
+
+
+def _filling_clause():
+    return or_(
+        Product.store_date_id.is_not(None),
+        and_(
+            Product.store_product_id.is_(None),
+            Product.category_id.in_(select(Category.id).where(Category.name == FILLING_CATEGORY)),
+        ),
+    )
+
+
+def _shop_clause():
+    """SQL for "not a filling", safe for products without a category."""
+    return and_(
+        Product.store_date_id.is_(None),
+        or_(
+            Product.store_product_id.is_not(None),
+            Product.category_id.is_(None),
+            Product.category_id.not_in(select(Category.id).where(Category.name == FILLING_CATEGORY)),
+        ),
+    )
+
+
+def _filling_row(p: Product) -> dict:
+    """A filling as the model sees it: name and weight only, never a price."""
+    return {
+        "product_id": p.id,
+        "name": p.name,
+        "weight_grams": p.weight_grams,
+        "kind": "box_filling",
+    }
 
 
 def _normalized_base_name(name: str) -> str:
@@ -108,7 +157,9 @@ async def _cross_category_siblings(
     return [
         p
         for p in result.scalars().all()
-        if p.id not in seen_ids and _normalized_base_name(p.name) in base_names
+        if p.id not in seen_ids
+        and not is_filling(p)
+        and _normalized_base_name(p.name) in base_names
     ]
 
 
@@ -117,6 +168,7 @@ async def search_products(
     query: str,
     category: str | None = None,
     limit: int = 8,
+    for_box: bool = False,
 ) -> list[dict]:
     """Fuzzy-ish product search for the LLM tool. Case-insensitive substring
     match over name + description; optional category filter. Returns plain dicts
@@ -129,11 +181,17 @@ async def search_products(
     happened to surface, every sibling is added to the result set so the
     concierge sees (and can present) all of them instead of guessing which
     the guest meant - "server is authoritative, don't guess" applies to
-    disambiguation, not just pricing/capacity math."""
+    disambiguation, not just pricing/capacity math.
+
+    Box fillings (individual dates, priced per piece) are not shop products and
+    are never returned, except with `for_box=True` (the guest is building a box
+    or asks for box dates): then ONLY fillings come back, as name + weight with
+    no price."""
     term = (query or "").strip()
 
     async def _run(cat: str | None) -> list[Product]:
         stmt = select(Product).where(Product.is_active.is_(True))
+        stmt = stmt.where(_filling_clause() if for_box else _shop_clause())
         if term:
             like = f"%{term}%"
             stmt = stmt.where(Product.name.ilike(like) | Product.description.ilike(like))
@@ -153,7 +211,7 @@ async def search_products(
         category = None
         products = await _run(None)
 
-    if term and not category and products:
+    if term and not category and products and not for_box:
         products = products + await _cross_category_siblings(session, products)
 
     # Rank an exact (case-insensitive) name match first - it's still the best
@@ -163,6 +221,8 @@ async def search_products(
     term_lower = term.lower()
     products.sort(key=lambda p: (p.name.lower() != term_lower, p.name))
 
+    if for_box:
+        return [_filling_row(p) for p in products]
     return [_row_from_product(p) for p in products]
 
 
@@ -170,10 +230,11 @@ async def list_bestsellers(session: AsyncSession, limit: int = 6) -> list[dict]:
     """Curated bestsellers (products.is_bestseller, seeded by
     scripts/seed_catalog.py) - a structural flag rather than a free-text
     search, so "what are your bestsellers" doesn't depend on that literal
-    phrase substring-matching a product's name/description (it never would)."""
+    phrase substring-matching a product's name/description (it never would).
+    Box fillings are never bestsellers, whatever their flag says."""
     stmt = (
         select(Product)
-        .where(Product.is_active.is_(True), Product.is_bestseller.is_(True))
+        .where(Product.is_active.is_(True), Product.is_bestseller.is_(True), _shop_clause())
         .options(selectinload(Product.category), selectinload(Product.variants))
         .order_by(Product.name)
         .limit(limit)

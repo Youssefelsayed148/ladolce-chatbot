@@ -125,6 +125,10 @@ def test_seed_flags_curated_bestsellers():
     assert products["The Royal Assortment"].is_bestseller is True
     # Everything not in the curated list stays unflagged.
     assert products["Ajwa Date"].is_bestseller is False
+    # Per-piece fillings are never flagged, even if a curated name matches.
+    for row in products_data:
+        if row["category"] == "Individual Dates":
+            assert products[_product_name_of(row)].is_bestseller is False
     assert products["Khudri Dates with Almond (500g)"].is_bestseller is False
 
 
@@ -168,3 +172,18 @@ def test_seed_is_idempotent():
     assert session.execute(select(Product)).scalars().all().__len__() == 3
     assert session.execute(select(Category)).scalars().all().__len__() == 2
     assert session.execute(select(PlateSize)).scalars().all().__len__() == 1
+
+
+def _product_name_of(row):
+    return seed_catalog._product_name(row)
+
+
+def test_seed_never_flags_individual_dates_even_if_curated_name_matches():
+    session = _make_session()
+    products_data = SAMPLE_PRODUCTS + [
+        {"name": "Golden Sukkari Date", "name_ar": None, "description": None, "description_ar": None,
+         "price": 6, "image_url": None, "category": "Individual Dates", "variant": None},
+    ]
+    seed_catalog.seed(session, products_data, SAMPLE_PLATE_SIZES)
+    p = session.execute(select(Product).where(Product.name == "Golden Sukkari Date")).scalar_one()
+    assert p.is_bestseller is False

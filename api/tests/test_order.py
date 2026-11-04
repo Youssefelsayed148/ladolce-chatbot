@@ -18,7 +18,10 @@ async def cart_ready(prepare_db):
         await session.flush()
 
         ajwa = Product(category_id=cat.id, name="Ajwa Date", price=6, is_active=True)
-        pack = Product(category_id=cat.id, name="Khudri Pack (1kg)", price=160, is_active=True)
+        packs = Category(name="Date Packs", sort_order=1)
+        session.add(packs)
+        await session.flush()
+        pack = Product(category_id=packs.id, name="Khudri Pack (1kg)", price=160, is_active=True)
         session.add_all([ajwa, pack])
         await session.flush()
 
@@ -40,6 +43,7 @@ async def cart_ready(prepare_db):
             "session_token": conversation.session_token,
             "conversation_id": conversation.id,
             "ajwa": ajwa.id,
+            "pack": pack.id,
             "expected_total": 398.0,  # 320 (pack) + 78 (plate: base 60 + 3 x Ajwa 6)
         }
 
@@ -154,7 +158,7 @@ async def test_modifying_reviewed_cart_reverts_and_blocks_confirm(client, cart_r
     # Modify the cart after review -> review is invalidated (status back to building).
     async with get_sessionmaker()() as session:
         draft = await cart_service.get_active_draft(session, cart_ready["conversation_id"])
-        await cart_service.add_single_product(session, draft, cart_ready["ajwa"], 1)
+        await cart_service.add_single_product(session, draft, cart_ready["pack"], 1)
         assert draft.status == "building"
 
     # Confirm now blocked until re-review.
