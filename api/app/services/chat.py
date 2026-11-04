@@ -187,6 +187,14 @@ async def _consume_stream(stream):
     tool_calls: dict[int, dict] = {}
 
     async for chunk in stream:
+        usage = chunk.get("usage") if isinstance(chunk, dict) else getattr(chunk, "usage", None)
+        if usage:
+            u = usage if isinstance(usage, dict) else usage.model_dump()
+            logger.info(
+                "llm_usage",
+                extra={"prompt_tokens": u.get("prompt_tokens"),
+                       "completion_tokens": u.get("completion_tokens")},
+            )
         if isinstance(chunk, dict):
             choices = chunk.get("choices") or []
         else:
@@ -250,7 +258,8 @@ async def generate_chat_events(
 
     for _round in range(MAX_TOOL_ROUNDS):
         stream = await client.chat.completions.create(
-            model=model, messages=messages, tools=ALL_TOOLS, stream=True
+            model=model, messages=messages, tools=ALL_TOOLS, stream=True,
+            stream_options={"include_usage": True},
         )
         final = None
         async for kind, payload in _consume_stream(stream):
