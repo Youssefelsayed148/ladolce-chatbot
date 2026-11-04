@@ -146,6 +146,15 @@ export interface ProductCardData {
   description: string | null;
   price: number | null;
   category?: string | null;
+  /** Lowest in-stock variant price (shop products sold by weight/size). */
+  price_from?: number | null;
+  variants?: ProductVariantOption[];
+}
+
+export interface ProductVariantOption {
+  variant_id: number;
+  label: string;
+  price: number;
 }
 
 export interface PlateBuilderItem {

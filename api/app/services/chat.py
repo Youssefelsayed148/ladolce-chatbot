@@ -55,9 +55,20 @@ _REVIEW_INTENT_RE = re.compile(
 _BUILD_INTENT_RE = re.compile(r"\b(build|start|make|create|want|like|choose|pick|go with|take)\b", re.IGNORECASE)
 
 
+# The product card's "Add" button appends this marker so the exact product and
+# variant are added server-side, not re-guessed by the model from a name.
+_ADD_MARKER_RE = re.compile(r"\[add product_id=(\d+)(?: variant_id=(\d+))?(?: qty=(\d+))?\]")
+
+
 async def _shortcut_calls(session: AsyncSession, draft: CartDraft, user_text: str) -> list[tuple[str, dict]]:
     """Tool calls the guest's message unambiguously asks for, in order."""
     calls: list[tuple[str, dict]] = []
+    marker = _ADD_MARKER_RE.search(user_text)
+    if marker:
+        args = {"product_id": int(marker.group(1)), "quantity": int(marker.group(3) or 1)}
+        if marker.group(2):
+            args["variant_id"] = int(marker.group(2))
+        return [("add_single_product", args)]
     text = user_text.lower()
     plates = [
         i for i in await cart_service._load_items(session, draft.id) if i.item_type == "custom_plate"

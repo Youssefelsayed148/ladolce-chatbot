@@ -138,3 +138,36 @@ async def test_start_plate_reuses_empty_box_of_same_size(shop):
         assert again.data["cart_item_id"] == first.data["cart_item_id"]
         state = await cart_service.get_cart_state_by_draft(s, d)
         assert len(state["items"]) == 1
+
+
+async def test_product_card_carries_in_stock_variants_and_price_from(shop):
+    async with get_sessionmaker()() as s:
+        conv = await s.get(Conversation, shop["conv"])
+        d = await _d(s, shop)
+        r = await dispatch_tool(s, None, conv, d, "search_products", {"query": "Khudri"})
+        data = r.ui_blocks[0]["data"]
+        assert {v["label"] for v in data["variants"]} == {"500g / S", "1kg / S"}
+        assert all({"variant_id", "label", "price"} <= set(v) for v in data["variants"])
+        assert data["price_from"] == 110
+        # a product without variants has none and no price_from
+        r = await dispatch_tool(s, None, conv, d, "search_products", {"query": "Legacy"})
+        assert "variants" not in r.ui_blocks[0]["data"]
+        assert r.ui_blocks[0]["data"]["price_from"] is None
+
+
+async def test_card_add_marker_adds_the_exact_variant_server_side(shop):
+    from app.services.chat import generate_chat_events
+    from tests.conftest import FakeOpenAIClient
+
+    async with get_sessionmaker()() as s:
+        conv = await s.get(Conversation, shop["conv"])
+        d = await _d(s, shop)
+        text = (f"I'd like to add Khudri Almond (1kg / S) to my order, please. "
+                f"[add product_id={shop['p']} variant_id={shop['v3']} qty=2]")
+        events = [e async for e in generate_chat_events(s, FakeOpenAIClient("plain"), "m", conv, d, [], text)]
+        calls = [(e["name"], e["arguments"]) for e in events if e["type"] == "tool_call"]
+        assert calls == [("add_single_product",
+                          {"product_id": shop["p"], "variant_id": shop["v3"], "quantity": 2})]
+        state = await cart_service.get_cart_state_by_draft(s, await _d(s, shop))
+        line = state["items"][0]
+        assert line["unit_price"] == 200 and line["line_total"] == 400 and line["variant_label"] == "1kg / S"
