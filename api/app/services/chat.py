@@ -23,6 +23,10 @@ from app.services.tools import ALL_TOOLS, dispatch_tool, parse_tool_args
 
 logger = logging.getLogger("app.chat")
 
+# Cap each reply: providers like OpenRouter reserve credit for the model's maximum
+# output when none is set, and a concierge reply never needs more than this.
+MAX_REPLY_TOKENS = 1500
+
 MAX_TOOL_ROUNDS = 6
 
 SYSTEM_PROMPT = (
@@ -41,12 +45,16 @@ SYSTEM_PROMPT = (
     "prices the tools return are in AED (UAE Dirhams) - always write them as e.g. "
     "'450 AED', never with a $ or any other currency symbol.\n\n"
     "Custom boxes/trays follow the store's rules: a box is priced by its size only "
-    "(the dates inside add nothing), and it is limited by BOTH a maximum number of "
+    "(the dates inside add nothing - never quote per-piece prices for a box's fillings), and it is limited by BOTH a maximum number of "
     "pieces AND a maximum total weight in grams - tool results report the remaining "
     "pieces and grams; relay them, never calculate fit yourself. Only individual "
     "date varieties go in a box. For every custom box also ask which ribbon finish "
     "they would like (set_finish - required before review) and offer an optional "
     "gift message of at most 180 characters (set_gift_message).\n\n"
+    "Call tools silently: write NO text before or between tool calls, only one reply "
+    "after all tools are done. You only collect the order - payment and checkout "
+    "happen on the store's own checkout page after the guest taps Review Order; "
+    "never say you take payment.\n\n"
     "Store products that list `variants` come in sizes/weights (e.g. '500g / M', "
     "'1kg / L') each with its own price: ask which one the guest wants, quote that "
     "variant's price, and pass its variant_id to add_single_product - never guess.\n\n"
@@ -258,7 +266,7 @@ async def generate_chat_events(
 
     for _round in range(MAX_TOOL_ROUNDS):
         stream = await client.chat.completions.create(
-            model=model, messages=messages, tools=ALL_TOOLS, stream=True,
+            model=model, messages=messages, tools=ALL_TOOLS, stream=True, max_tokens=MAX_REPLY_TOKENS,
             stream_options={"include_usage": True},
         )
         final = None
@@ -296,7 +304,7 @@ async def generate_chat_events(
     else:
         # Loop exhausted without a plain-text finish - ask once more, no tools.
         stream = await client.chat.completions.create(
-            model=model, messages=messages, stream=True
+            model=model, messages=messages, stream=True, max_tokens=MAX_REPLY_TOKENS
         )
         async for kind, payload in _consume_stream(stream):
             if kind == "token":
