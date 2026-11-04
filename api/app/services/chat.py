@@ -41,6 +41,16 @@ _SIZE_INTENT_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Questions about a specific product must be answered from a fresh tool call, never
+# from an earlier turn (gpt-4o answered "Tell me about Khudri dates with almond" from
+# the best-sellers list it had just shown, so no variant card appeared). The first
+# model round is then forced to call a tool; later rounds stay free so it can reply.
+_PRODUCT_INTENT_RE = re.compile(
+    r"\b(tell me (more )?about|more about|do you (have|sell)|price of|cost of|describe"
+    r"|details? (on|about|of)|info on)\b",
+    re.IGNORECASE,
+)
+
 # Checkout steps must not depend on the model remembering to call a tool (gpt-4o
 # answered "review my order" in prose and never showed the Review button). When the
 # guest clearly asks for one of these, the server performs it BEFORE the model
@@ -389,10 +399,12 @@ async def generate_chat_events(
                 {"role": "tool", "tool_call_id": f"auto_{i}", "content": _json_result(result.data)}
             )
 
+    force_tool = not shortcuts and bool(_PRODUCT_INTENT_RE.search(user_text))
     for _round in range(MAX_TOOL_ROUNDS):
+        extra = {"tool_choice": "required"} if force_tool and _round == 0 else {}
         stream = await client.chat.completions.create(
             model=model, messages=messages, tools=ALL_TOOLS, stream=True, max_tokens=MAX_REPLY_TOKENS,
-            stream_options={"include_usage": True},
+            stream_options={"include_usage": True}, **extra,
         )
         final = None
         async for kind, payload in _consume_stream(stream):

@@ -280,3 +280,22 @@ async def test_non_box_question_gets_no_size_cards(client, use_fake_openai):
     use_fake_openai("plain")
     events = await _collect_events(client, {"message": "hello"})
     assert not [e for e in events if e["type"] == "ui_block"]
+
+
+async def test_product_question_forces_a_tool_call_on_the_first_round(client, use_fake_openai):
+    """gpt-4o once answered "Tell me about Khudri dates with almond" from the earlier
+    best-sellers turn without searching, so no variant card appeared."""
+    fake = use_fake_openai("plain")
+    await _collect_events(client, {"message": "Tell me about Khudri dates with almond"})
+    main_calls = [c for c in fake.chat.completions.calls if c.get("tools")]
+    assert main_calls[0]["tool_choice"] == "required"
+    # later rounds must stay free, or the model could never write its reply
+    assert all(c.get("tool_choice") in (None, "auto") for c in main_calls[1:])
+
+
+async def test_small_talk_and_cart_messages_do_not_force_a_tool(client, use_fake_openai):
+    fake = use_fake_openai("plain")
+    for text in ("thanks!", "yes please", "what is my cart total?"):
+        await _collect_events(client, {"message": text})
+    main_calls = [c for c in fake.chat.completions.calls if c.get("tools")]
+    assert main_calls and all(c.get("tool_choice") in (None, "auto") for c in main_calls)
