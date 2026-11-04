@@ -31,7 +31,7 @@ from app.core.config import get_settings
 from app.core.db import get_sessionmaker
 from app.core.limiter import chat_rate_limit, limiter
 from app.deps import get_embedding_client, get_openai_client
-from app.models import Conversation, Finish, Message
+from app.models import Conversation, Finish, Message, Product
 from app.services import cart as cart_service
 from app.services import catalog as catalog_service
 from app.services.chat import generate_chat_events
@@ -142,6 +142,59 @@ async def _categories_context(session: AsyncSession) -> str:
     )
 
 
+async def _cart_context(session: AsyncSession, draft) -> str:
+    """The cart as it stands right now, with ids. Tool results are not replayed in the
+    saved history, so without this the model forgets cart_item_ids between turns and
+    guesses (wrong box, wrong date)."""
+    state = await cart_service.get_cart_state_by_draft(session, draft)
+    if not state["items"]:
+        return "Current cart: empty."
+    lines = []
+    for it in state["items"]:
+        if it["type"] == "custom_plate":
+            contents = ", ".join(f"{c['name']} x{c['quantity']}" for c in it["contents"]) or "empty"
+            if it.get("pieces_total") is not None:
+                room = (
+                    f"{it['pieces_used']}/{it['pieces_total']} pieces, {it['grams_used']}/"
+                    f"{it['grams_total']}g used; {it['remaining_pieces']} pieces and "
+                    f"{it['remaining_grams']}g left"
+                )
+            else:
+                room = f"{it['capacity_used']}/{it['capacity_total']} slots used"
+            lines.append(
+                f"  - custom box cart_item_id={it['cart_item_id']}: {it['plate_size']}, {room}; "
+                f"ribbon: {it.get('finish') or 'not chosen'}; contents: {contents}"
+            )
+        else:
+            lines.append(f"  - {it['name']} x{it['quantity']} (cart_item_id={it['cart_item_id']})")
+    return (
+        "Current cart (use these cart_item_ids; keep adding to the existing box, never "
+        "start another one unless the guest asks for a second box):\n" + "\n".join(lines)
+    )
+
+
+async def _box_dates_context(session: AsyncSession) -> str:
+    """Individual dates that can go into a custom box, with the product_id to pass to
+    add_item_to_plate. Guests name dates, the model must not guess ids."""
+    rows = (
+        await session.execute(
+            select(Product)
+            .where(Product.is_active.is_(True))
+            .where(Product.store_date_id.is_not(None))
+            .where(Product.weight_grams.is_not(None))
+            .order_by(Product.name)
+        )
+    ).scalars().all()
+    if not rows:
+        return ""
+    lines = [f"  - product_id={p.id}: {p.name} ({p.weight_grams}g)" for p in rows]
+    return (
+        "Dates that can go into a custom box (pass this exact product_id to add_item_to_plate; "
+        "a bare number from the guest is the quantity for the date just discussed):\n"
+        + "\n".join(lines)
+    )
+
+
 async def _event_stream(
     client: AsyncOpenAI, model: str, body: ChatRequest, embedding_client: AsyncOpenAI
 ) -> AsyncGenerator[str, None]:
@@ -159,6 +212,8 @@ async def _event_stream(
                 await _plate_sizes_context(session),
                 await _finishes_context(session),
                 await _categories_context(session),
+                await _cart_context(session, draft),
+                await _box_dates_context(session),
             )
             if note
         )

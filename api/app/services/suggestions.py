@@ -28,7 +28,7 @@ def _box_chips(blocks: list[dict]) -> list[str]:
     plate = next((b["data"] for b in reversed(blocks) if b.get("type") == "plate_builder"), None)
     if plate and plate.get("capacity_total") and plate.get("capacity_used", 0) >= plate["capacity_total"]:
         return ["Choose a ribbon finish", "Add a gift message", "Review my order"]
-    return ["Show me Ajwa dates", "Show me stuffed dates", "Choose a ribbon finish"]
+    return ["Which dates can I add?", "Choose a ribbon finish", "Add a gift message"]
 
 
 def rule_suggestions(user_text: str, tool_names: list[str], ui_blocks: list[dict]) -> list[str]:
