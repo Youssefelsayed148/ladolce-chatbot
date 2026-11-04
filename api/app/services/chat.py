@@ -23,7 +23,7 @@ from app.core.config import get_settings
 from app.models import CartDraft, Conversation, Finish
 from app.services import cart as cart_service
 from app.services import catalog as catalog_service
-from app.services.suggestions import rule_suggestions
+from app.services.suggestions import drop_impossible, rule_suggestions
 from app.services.tools import ALL_TOOLS, dispatch_tool, parse_tool_args
 
 logger = logging.getLogger("app.chat")
@@ -365,6 +365,7 @@ async def generate_chat_events(
     reply_parts: list[str] = []
     made_tool_calls: list[dict] = []
     ui_blocks: list[dict] = []
+    failed_tools: list[str] = []
 
     shortcuts = await _shortcut_calls(session, draft, user_text)
     if shortcuts:
@@ -379,6 +380,8 @@ async def generate_chat_events(
             result = await dispatch_tool(
                 session, client, conversation, draft, name, args, embedding_client
             )
+            if "error" in result.data:
+                failed_tools.append(name)
             for block in result.ui_blocks:
                 ui_blocks.append(block)
                 yield {"type": "ui_block", "block": block}
@@ -412,6 +415,8 @@ async def generate_chat_events(
             result = await dispatch_tool(
                 session, client, conversation, draft, slot["name"], args, embedding_client
             )
+            if "error" in result.data:
+                failed_tools.append(slot["name"])
             for block in result.ui_blocks:
                 ui_blocks.append(block)
                 yield {"type": "ui_block", "block": block}
@@ -455,11 +460,22 @@ async def generate_chat_events(
     suggestions: list[str] = []
     if get_settings().suggestions_enabled:
         tool_names = [c["name"] for c in made_tool_calls]
-        suggestions = rule_suggestions(user_text, tool_names, ui_blocks)
+        items = await cart_service._load_items(session, draft.id)
+        cart_empty = not items
+        has_box = any(i.item_type == "custom_plate" for i in items)
+        suggestions = drop_impossible(
+            rule_suggestions(
+                user_text, tool_names, ui_blocks, failed_tools=failed_tools, cart_empty=cart_empty
+            ),
+            cart_empty,
+            has_box,
+        )
         if not suggestions and not any(
             c["name"] == "request_review" for c in made_tool_calls
         ):
-            suggestions = await generate_suggestions(client, model, user_text, reply_text)
+            suggestions = drop_impossible(
+                await generate_suggestions(client, model, user_text, reply_text), cart_empty, has_box
+            )
     yield {"type": "suggestions_block", "suggestions": suggestions}
 
 

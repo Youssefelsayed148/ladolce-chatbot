@@ -113,3 +113,16 @@ async def test_fillings_still_go_into_a_store_box(shop):
         cid = started.data["cart_item_id"]
         r = await cart_service.add_item_to_plate(s, d, cid, shop["synced"], 2)
         assert "error" not in r.data
+
+
+async def test_failed_add_never_suggests_review_end_to_end(shop):
+    from app.services.chat import generate_chat_events
+    from tests.conftest import FakeOpenAIClient
+
+    async with get_sessionmaker()() as s:
+        conv = await s.get(Conversation, shop["conv"])
+        d = await cart_service.get_active_draft(s, shop["conv"])
+        text = f"add it [add product_id={shop['legacy']} qty=1]"
+        events = [e async for e in generate_chat_events(s, FakeOpenAIClient("plain"), "m", conv, d, [], text)]
+        chips = next(e for e in events if e["type"] == "suggestions_block")["suggestions"]
+        assert chips and not any("review" in c.lower() for c in chips)
