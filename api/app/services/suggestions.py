@@ -35,7 +35,10 @@ def rule_suggestions(user_text: str, tool_names: list[str], ui_blocks: list[dict
     """Return up to MAX_SUGGESTIONS chips for this turn, or [] if no rule fits."""
     for name in reversed(tool_names):
         if name == "request_review":
-            return []  # the Review Order button is the next step
+            if any(b.get("type") == "review_order_button" for b in ui_blocks):
+                return []  # the Review Order button is the next step
+            # review was refused (e.g. no ribbon yet): point at what is missing
+            return ["Choose a ribbon finish", "Add a gift message", "Add more dates to the box"]
         if name == "set_gift_message":
             return ["Review my order", "Add more dates to the box", "How long does delivery take?"]
         if name == "set_finish":
