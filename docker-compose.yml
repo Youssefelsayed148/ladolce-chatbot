@@ -1,30 +1,29 @@
-# Full stack for local dev / VPS deploy.
+# Whole stack, one command:   docker compose up -d --build
 #
-#   nginx (public :80)  ->  web (React SPA)      :80
-#                       ->  api (FastAPI)        :8000
-#   api                 ->  db  (Postgres 16)    :5432
+#   caddy (public :80/:443, automatic HTTPS)  ->  web (SPA + widget.js)   :80
+#                                             ->  api (FastAPI)           :8000
+#   api                                       ->  db  (Postgres+pgvector) :5432
 #
-# Copy .env.example to .env and fill in secrets before `docker compose up`.
+# Copy .env.example to .env and fill in the values first (see docs/deploy.md).
+# On start the api container migrates the DB, seeds the catalog the first time,
+# syncs it from the store and ingests the knowledge base (see api/entrypoint.sh).
 
 services:
   db:
     image: pgvector/pgvector:pg16
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-ladolce}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ladolce}
-      POSTGRES_DB: ${POSTGRES_DB:-ladolce}
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB in .env}
     volumes:
       - db_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ladolce} -d ${POSTGRES_DB:-ladolce}"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 10
-    # Bound to localhost only (dev inspection); never reachable from outside the
-    # host. Remove entirely on the VPS if not needed.
-    ports:
-      - "127.0.0.1:5432:5432"
+    # No published ports: only the api container can reach the database.
 
   api:
     build: ./api
@@ -32,67 +31,47 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    # API keys come ONLY from env_file (a direct read of the literal .env file),
-    # not from `environment: ${...}` shell substitution. The latter lets an
-    # unrelated OPENAI_API_KEY / LLM_API_KEY exported elsewhere in your shell/
-    # session (a different project, a global profile) silently outrank this
-    # project's own .env - which is exactly what happened: `docker compose
-    # exec api printenv OPENAI_API_KEY` showed a key that didn't match .env at
-    # all, and it turned out to be quota-exhausted, causing the "unable to
-    # respond" fallback. env_file: reads the file's bytes directly, so nothing
-    # in the ambient environment can shadow it.
+    # All settings (DATABASE_URL, keys, CORS, ...) come from env_file, which reads the
+    # literal .env file, so nothing exported in the host shell can shadow it.
     env_file:
       - .env
-    environment:
-      ENVIRONMENT: ${ENVIRONMENT:-development}
-      LOG_LEVEL: ${LOG_LEVEL:-INFO}
-      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://ladolce:ladolce@db:5432/ladolce}
-      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o}
-      OPENAI_EMBEDDING_MODEL: ${OPENAI_EMBEDDING_MODEL:-text-embedding-3-small}
-      LLM_PROVIDER: ${LLM_PROVIDER:-opencodego}
-      LLM_API_BASE: ${LLM_API_BASE:-https://opencode.ai/zen/go/v1}
-      LLM_MODEL: ${LLM_MODEL:-kimi-k2.7-code}
-      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080,http://localhost:5173}
-      CHAT_RATE_LIMIT: ${CHAT_RATE_LIMIT:-20/minute}
-      SUGGESTIONS_ENABLED: ${SUGGESTIONS_ENABLED:-true}
-    # Mount the Alembic project so migrations can be run inside the api container
-    # (which already has alembic + the psycopg driver installed), e.g.:
-    #   docker compose run --rm -w /db api alembic upgrade head
-    # Mount ./data at /data so the seed script can read the pipeline output:
-    #   docker compose run --rm api python scripts/seed_catalog.py
     volumes:
-      - ./db:/db
-      - ./data:/data:ro
+      - ./db:/db:ro        # Alembic migrations
+      - ./data:/data:ro    # catalog + knowledge-base sources
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health').status==200 else 1)\""]
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 120s   # first start seeds the catalog and embeds the KB
     expose:
       - "8000"
 
   web:
     build: ./web
     restart: unless-stopped
-    depends_on:
-      - api
     expose:
       - "80"
 
-  nginx:
-    image: nginx:1.27-alpine
+  caddy:
+    image: caddy:2-alpine
     restart: unless-stopped
     depends_on:
-      - api
-      - web
+      api:
+        condition: service_healthy
+      web:
+        condition: service_started
+    environment:
+      DOMAIN: ${DOMAIN:-localhost}
     volumes:
-      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
-      # On the VPS, also mount the Let's Encrypt cert dir and enable the 443
-      # server block in nginx/nginx.conf:
-      # - /etc/letsencrypt:/etc/letsencrypt:ro
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data        # issued certificates
+      - caddy_config:/config
     ports:
-      - "80:80"
-      # - "443:443"   # enable with TLS on the VPS
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
 
 volumes:
   db_data:
+  caddy_data:
+  caddy_config:

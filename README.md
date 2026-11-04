@@ -1,100 +1,46 @@
-# La Dolce Saveur — Ordering Chatbot
+# La Dolce Saveur - Ordering Chatbot
 
-Customer-facing chatbot for [ladolcesaveur.com](https://ladolcesaveur.com): answers
-product questions, recommends items, lets a customer build a custom date box/tray
-within capacity limits, and hands a finished order off to checkout.
+A chat concierge for [ladolcesaveur.com](https://ladolcesaveur.com): answers product
+questions, builds custom date boxes within the store's rules (pieces and grams, ribbon
+finish, gift message), sells single products in their sizes, and fills the customer's
+own store cart. The guest then finishes on the store's checkout page - the chatbot never
+touches payment. Prices always come from the store.
 
-Design spec: [`docs/specs/2026-07-23-ordering-chatbot-design.md`](docs/specs/2026-07-23-ordering-chatbot-design.md).
-
-> **Status:** scaffold. All API endpoints are stubs returning HTTP 200 — no LLM,
-> cart, or persistence logic yet. This stage exists to stand the container stack up.
+Design notes: [`docs/specs/`](docs/specs/). Test results and store-developer notes:
+[`docs/store-integration-results.md`](docs/store-integration-results.md).
 
 ## Stack
 
 | Service | Tech | Role |
 |---|---|---|
-| `nginx` | Nginx | Public reverse proxy (`/api/*` → api, `/*` → web), TLS termination on the VPS |
-| `web`   | React + Vite + TypeScript | Chat widget SPA (served static behind its own internal nginx) |
-| `api`   | FastAPI (Python 3.12), pip | Chat orchestration, cart, orders, catalog. `/api/chat` is streaming-first (SSE) |
-| `db`    | PostgreSQL 16 | Catalog, conversations, carts, orders |
+| `caddy` | Caddy 2 | Public entry point; automatic HTTPS; `/api/*` -> api, everything else -> web |
+| `web`   | React + Vite + TS, nginx | Chat UI and the embeddable `widget.js` |
+| `api`   | FastAPI (Python 3.12) | Chat orchestration (SSE), cart, orders, catalog, store quote |
+| `db`    | PostgreSQL 16 + pgvector | Catalog, conversations, carts, orders, knowledge base |
 
-Migrations live in [`db/`](db/) (Alembic). The data pipeline that builds the seed
-catalog lives in [`scripts/`](scripts/) with output in [`data/`](data/).
+Chat model: any OpenAI-compatible provider via `LLM_API_BASE` / `LLM_API_KEY` /
+`LLM_MODEL` (tested: OpenRouter `z-ai/glm-4.7`, OpenAI `gpt-4o`). Embeddings: OpenAI.
 
-## Prerequisites
-
-- Docker + Docker Compose
-- (For running the data pipeline scripts locally: Python 3.11+, Node.js)
-
-## Run it
+## Run it (one command)
 
 ```bash
-# 1. Configure environment
-cp .env.example .env
-# edit .env — at minimum set a real OPENAI_API_KEY (not needed for the scaffold
-# stubs, but required once chat logic lands) and change the Postgres password.
-
-# 2. Build and start the whole stack
-docker compose up --build
+cp .env.example .env        # fill in the values (see docs/deploy.md)
+docker compose up -d --build
 ```
 
-Then:
+On start the api container migrates the database, seeds the catalog the first time,
+syncs it from the store and ingests the knowledge base. Locally, set `DOMAIN=localhost`
+(self-signed certificate; add `HTTP_PORT=8080 HTTPS_PORT=8443` if 80/443 are busy).
 
-- App (via reverse proxy): <http://localhost>
-- API health through the proxy: <http://localhost/api/health>
-- API docs (Swagger): the api container exposes `:8000` internally; through the
-  proxy, API routes are under `/api/*`.
+Embed on the store with one tag - see [`docs/deploy.md`](docs/deploy.md).
 
-Stop with `Ctrl+C`, or `docker compose down` (add `-v` to also drop the DB volume).
-
-### Verify the stubs
+## Development
 
 ```bash
-curl http://localhost/api/health
-# {"status":"ok","environment":"development"}
-
-curl http://localhost/api/products      # []
-curl http://localhost/api/plate-sizes   # []
-
-# Streaming chat stub (Server-Sent Events):
-curl -N -X POST http://localhost/api/chat \
-  -H "Content-Type: application/json" \
-  -d '{"conversation_id":"demo","message":"hi"}'
+cd api && python -m venv .venv && .venv/bin/pip install -r requirements.txt -r requirements-dev.txt
+.venv/bin/python -m pytest          # backend tests (SQLite, no network)
+cd web && npm install && npm test   # frontend tests
 ```
 
-## Database migrations (Alembic)
-
-The api container has Alembic installed and mounts `./db` at `/db`:
-
-```bash
-# Create a new migration once ORM models exist:
-docker compose run --rm -w /db api alembic revision --autogenerate -m "message"
-
-# Apply migrations:
-docker compose run --rm -w /db api alembic upgrade head
-```
-
-(There are no models or migrations yet — this is wired for Phase 1.)
-
-## Project layout
-
-```
-api/          FastAPI backend (app/ with core/ + routers/)
-web/          React + Vite frontend
-db/           Alembic migration project
-nginx/        Public reverse-proxy config (TLS placeholder for Let's Encrypt)
-scripts/      One-off data pipeline (site scraper, PDF extract, merge/dedupe)
-data/         Pipeline output (scraped_*.json, unique_products.json, ...)
-docs/specs/   Design docs
-docker-compose.yml
-.env.example
-```
-
-## Notes
-
-- **No secrets in the repo.** All config comes from `.env` (gitignored); only
-  `.env.example` with placeholders is committed.
-- **TLS** is not configured locally. On the VPS, issue certs with Let's Encrypt and
-  enable the commented 443 server block in [`nginx/nginx.conf`](nginx/nginx.conf).
-- **`/api/chat` is built streaming-first** (SSE) so real OpenAI token streaming
-  drops in without an endpoint rewrite.
+Layout: `api/` backend, `web/` frontend, `db/` Alembic migrations, `data/` catalog and
+knowledge-base sources, `scripts/` the original catalog-scraping pipeline, `caddy/` proxy config.

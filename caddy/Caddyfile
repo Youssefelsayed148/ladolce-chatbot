@@ -1,0 +1,18 @@
+# Public entry point. With DOMAIN=chat.example.com (DNS pointing at this server)
+# Caddy gets and renews a Let's Encrypt certificate by itself. DOMAIN=localhost
+# serves a local self-signed certificate for testing.
+{$DOMAIN:localhost} {
+	encode gzip
+
+	# FastAPI. flush_interval -1 streams the chat replies (SSE) token by token.
+	handle /api/* {
+		reverse_proxy api:8000 {
+			flush_interval -1
+		}
+	}
+
+	# SPA + widget.js (cache headers are set by the web container).
+	handle {
+		reverse_proxy web:80
+	}
+}
