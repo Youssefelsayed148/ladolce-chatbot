@@ -193,6 +193,24 @@ def _plate_line_total(item: CartItem) -> float:
     return round(float(item.unit_price) + fillings, 2)
 
 
+async def _plate_price(item: CartItem) -> tuple[float, bool]:
+    """(total, estimated) for a custom box. Store boxes ask the store's own quote so
+    the chat shows exactly what the store will charge; if the store can't be
+    reached we fall back to the local figure and flag it as an estimate."""
+    local = _plate_line_total(item)
+    if not _is_store_plate(item) or not item.plate_contents:
+        return local, False
+    finish = getattr(item, "finish", None)
+    total = await store_quote.quote_box(
+        item.plate_size.store_canvas_id,
+        bespoke_items_payload(item),
+        finish.store_finish_id if finish else None,
+    )
+    if total is None:
+        return local, True
+    return float(total), False
+
+
 # --------------------------------------------------------------------------- #
 # Mutations
 # --------------------------------------------------------------------------- #
@@ -432,7 +450,7 @@ async def add_item_to_plate(
             "added": {"product": product.name, "quantity": quantity, "slots": added_slots},
             "capacity_used": _plate_slots_used(item),
             "capacity_total": capacity,
-            "plate_price": _plate_line_total(item),
+            "plate_price": block["data"]["price"],
             **(_plate_limits(item) if store_plate else {}),
         },
         ui_blocks=[block],
@@ -462,7 +480,7 @@ async def remove_item_from_plate(
             "removed": {"product_id": product_id},
             "capacity_used": _plate_slots_used(item),
             "capacity_total": item.plate_size.capacity,
-            "plate_price": _plate_line_total(item),
+            "plate_price": block["data"]["price"],
         },
         ui_blocks=[block],
     )
@@ -556,6 +574,20 @@ async def build_plate_builder_block(session: AsyncSession, item: CartItem) -> di
     """The section-4 plate_builder ui_block for a custom_plate cart item."""
     plate = item.plate_size
     used = _plate_slots_used(item)
+    total, estimated = await _plate_price(item)
+    base = float(item.unit_price)
+    if _is_store_plate(item) and not estimated and float(item.line_total) != total:
+        item.line_total = total
+        await session.commit()
+
+    # Per-date lines only when they add up to the store's total, so the card
+    # never shows a breakdown that disagrees with the price the store charges.
+    lines = {c.product_id: float(c.product.price or 0) * c.quantity if c.product else 0.0
+             for c in item.plate_contents}
+    show_lines = (
+        not _is_store_plate(item)
+        or (not estimated and sum(lines.values()) > 0 and abs(base + sum(lines.values()) - total) < 0.01)
+    )
     return {
         "type": "plate_builder",
         "data": {
@@ -569,13 +601,20 @@ async def build_plate_builder_block(session: AsyncSession, item: CartItem) -> di
                     "name": c.product.name if c.product else None,
                     "quantity": c.quantity,
                     "slots_used": c.slots_used,
-                    "unit_price": float(c.unit_price),
-                    "line_total": round(float(c.unit_price) * c.quantity, 2),
+                    "unit_price": (
+                        float(c.unit_price) if not _is_store_plate(item)
+                        else (float(c.product.price) if show_lines and c.product else 0.0)
+                    ),
+                    "line_total": (
+                        round(float(c.unit_price) * c.quantity, 2) if not _is_store_plate(item)
+                        else (round(lines[c.product_id], 2) if show_lines else 0.0)
+                    ),
                 }
                 for c in item.plate_contents
             ],
-            "base_price": float(item.unit_price),
-            "price": _plate_line_total(item),  # base + fillings
+            "base_price": base,
+            "price": total,
+            "price_estimated": estimated,
             **_box_extras(item),
         },
     }

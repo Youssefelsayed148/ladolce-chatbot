@@ -165,6 +165,8 @@ export interface PlateBuilderData {
   items: PlateBuilderItem[];
   base_price: number;
   price: number;
+  // true when the store's quote was unreachable and the total is the local figure.
+  price_estimated?: boolean;
 }
 
 export interface ReviewButtonData {

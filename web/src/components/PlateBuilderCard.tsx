@@ -211,7 +211,7 @@ export default function PlateBuilderCard({
                 color: colors.darkGreen,
               }}
             >
-              Total
+              {data.price_estimated ? "Estimated total" : "Total"}
             </span>
             <span
               style={{

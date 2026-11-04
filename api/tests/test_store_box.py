@@ -164,3 +164,45 @@ async def test_quote_client_success_and_failure(monkeypatch):
     monkeypatch.setattr(httpx, "AsyncClient", lambda **kw: orig(
         transport=httpx.MockTransport(lambda r: httpx.Response(400, json={"message": "no"})), **kw))
     assert await real("c1", []) is None
+
+
+async def test_card_total_follows_store_quote_with_breakdown(box, monkeypatch):
+    """Store charges for the dates: card shows the store total and per-date lines."""
+    async with get_sessionmaker()() as s:
+        d = await _draft(s, box)
+
+        async def fake(canvas_id, items, finish_id=None):
+            return 76.0  # 60 base + 2 x 8
+
+        monkeypatch.setattr(store_quote, "quote_box", fake)
+        r = await cart_service.add_item_to_plate(s, d, box["item"], box["heavy"], 2)
+        data = r.ui_blocks[0]["data"]
+        assert data["price"] == 76.0 and data["price_estimated"] is False
+        assert r.data["plate_price"] == 76.0
+        line = data["items"][0]
+        assert (line["unit_price"], line["line_total"]) == (8.0, 16.0)
+        # the cart line total now matches what the store will charge
+        state = await cart_service.get_cart_state_by_draft(s, d)
+        assert state["total_price"] == 76.0
+
+
+async def test_card_hides_line_prices_when_store_total_is_base_only(box, monkeypatch):
+    async with get_sessionmaker()() as s:
+        d = await _draft(s, box)
+
+        async def fake(canvas_id, items, finish_id=None):
+            return 60.0  # dates free
+
+        monkeypatch.setattr(store_quote, "quote_box", fake)
+        r = await cart_service.add_item_to_plate(s, d, box["item"], box["heavy"], 2)
+        data = r.ui_blocks[0]["data"]
+        assert data["price"] == 60.0
+        assert data["items"][0]["unit_price"] == 0.0  # card shows "included"
+
+
+async def test_card_flags_estimate_when_store_quote_unavailable(box):
+    async with get_sessionmaker()() as s:
+        d = await _draft(s, box)
+        r = await cart_service.add_item_to_plate(s, d, box["item"], box["heavy"], 2)  # stub -> None
+        data = r.ui_blocks[0]["data"]
+        assert data["price"] == 60.0 and data["price_estimated"] is True
