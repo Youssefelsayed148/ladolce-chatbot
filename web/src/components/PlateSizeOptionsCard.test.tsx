@@ -21,6 +21,15 @@ describe("PlateSizeOptionsCard", () => {
   });
 });
 
+describe("PlateSizeOptionsCard labeling", () => {
+  it("says it is a build-your-own box priced by size", () => {
+    render(<PlateSizeOptionsCard sizes={sizes} />);
+    expect(
+      screen.getByText("Build your own: price depends on the box size, not the dates")
+    ).toBeInTheDocument();
+  });
+});
+
 describe("MessageBubble markdown tables", () => {
   it("renders a GFM table as a real table, not raw pipes", () => {
     const text = "| Size | Price |\n|---|---|\n| Petite | 60 AED |";

@@ -149,6 +149,10 @@ export interface ProductCardData {
   /** Lowest in-stock variant price (shop products sold by weight/size). */
   price_from?: number | null;
   variants?: ProductVariantOption[];
+  /** "ready_made_box" = a finished box at its own price; "shop_product" otherwise. */
+  kind?: string | null;
+  /** A custom-box size sharing this ready-made box's name (priced by size only). */
+  custom_box_same_name?: { plate_size_id: number; name: string; price: number; note: string };
 }
 
 export interface ProductVariantOption {

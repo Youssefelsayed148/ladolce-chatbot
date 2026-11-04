@@ -146,6 +146,22 @@ export default function ProductCard({
           )}
         </div>
 
+        {data.kind === "ready_made_box" && (
+          <div
+            style={{
+              marginTop: space.xs,
+              fontFamily: fonts.body,
+              fontSize: 11,
+              fontWeight: 600,
+              letterSpacing: "0.08em",
+              textTransform: "uppercase",
+              color: colors.green,
+            }}
+          >
+            Ready-made box
+          </div>
+        )}
+
         {data.description && (
           <p
             style={{
@@ -161,6 +177,19 @@ export default function ProductCard({
             }}
           >
             {data.description}
+          </p>
+        )}
+
+        {data.custom_box_same_name && (
+          <p
+            style={{
+              margin: `${space.xs}px 0 0`,
+              fontFamily: fonts.body,
+              fontSize: 12,
+              color: colors.textMuted,
+            }}
+          >
+            Or build your own in this size: {aed(data.custom_box_same_name.price)} (price by size)
           </p>
         )}
 

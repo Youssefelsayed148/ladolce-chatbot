@@ -47,6 +47,43 @@ def is_filling(p: Product) -> bool:
     )
 
 
+# Collections the shop sells as finished boxes (price from the product/variant).
+# A custom box is a different thing: a canvas priced by size only.
+READY_MADE_CATEGORIES = {"gift boxes & trays", "pre-curated", "gift collection"}
+
+CUSTOM_BOX_NOTE = "Build your own: the price depends on the box size, not the dates."
+
+
+def _twin_key(name: str) -> str:
+    """"The Royal Assortment" / "Royal Assortment (1000g)" / "Royal Assortment 150"
+    all collapse to "royal assortment"."""
+    t = re.sub(r"\([^)]*\)", " ", name.lower())
+    t = re.sub(r"\d+", " ", t)
+    t = re.sub(r"^\s*the\s+", "", t)
+    return re.sub(r"\s+", " ", t).strip()
+
+
+async def _attach_custom_twins(session: AsyncSession, rows: list[dict]) -> list[dict]:
+    """A ready-made box often shares its name with a custom-box size (Royal
+    Assortment: 450 ready-made vs 150 custom). Say so on the row, so the two
+    are never confused."""
+    ready = [r for r in rows if r.get("kind") == "ready_made_box"]
+    if not ready:
+        return rows
+    plates = await list_plate_sizes(session)
+    for r in ready:
+        key = _twin_key(r["name"])
+        twin = next((p for p in plates if key and _twin_key(p.name) == key), None)
+        if twin is not None:
+            r["custom_box_same_name"] = {
+                "plate_size_id": twin.id,
+                "name": twin.name,
+                "price": float(twin.base_price),
+                "note": CUSTOM_BOX_NOTE,
+            }
+    return rows
+
+
 def _filling_clause():
     return or_(
         Product.store_date_id.is_not(None),
@@ -123,6 +160,13 @@ def _row_from_product(p: Product) -> dict:
         "description": p.description,
         "price": float(p.price) if p.price is not None else None,
         "category": p.category.name if p.category else None,
+        # "ready_made_box" = a finished box sold at its own price; never confuse
+        # it with a custom box (a size you fill yourself, priced by size).
+        "kind": (
+            "ready_made_box"
+            if p.category and p.category.name.lower() in READY_MADE_CATEGORIES
+            else "shop_product"
+        ),
         # Present only for store products sold in sizes/weights: the guest must
         # pick one (pass variant_id to add_single_product).
         **(
@@ -223,7 +267,7 @@ async def search_products(
 
     if for_box:
         return [_filling_row(p) for p in products]
-    return [_row_from_product(p) for p in products]
+    return await _attach_custom_twins(session, [_row_from_product(p) for p in products])
 
 
 async def list_bestsellers(session: AsyncSession, limit: int = 6) -> list[dict]:
@@ -241,4 +285,4 @@ async def list_bestsellers(session: AsyncSession, limit: int = 6) -> list[dict]:
     )
     result = await session.execute(stmt)
     products = result.scalars().all()
-    return [_row_from_product(p) for p in products]
+    return await _attach_custom_twins(session, [_row_from_product(p) for p in products])

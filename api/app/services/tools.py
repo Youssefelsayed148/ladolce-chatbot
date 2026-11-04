@@ -400,7 +400,7 @@ async def dispatch_tool(
         if name == "list_plate_sizes":
             sizes = [_plate_size_option(p) for p in await catalog_service.list_plate_sizes(session)]
             return cart_service.ToolResult(
-                data={"plate_sizes": sizes},
+                data={"plate_sizes": sizes, "note": catalog_service.CUSTOM_BOX_NOTE},
                 ui_blocks=[{"type": "plate_size_options", "data": {"sizes": sizes}}] if sizes else [],
             )
 
@@ -475,6 +475,7 @@ def _plate_size_option(plate) -> dict:
         "max_pieces": plate.max_pieces if is_store else plate.capacity,
         "capacity_grams": plate.capacity_grams if is_store else None,
         "price": float(plate.base_price),
+        "box_type": "custom",  # build-your-own, priced by size (not a ready-made box)
         "image_url": plate.image_url,
     }
 
@@ -490,7 +491,10 @@ def _product_card_from_row(row: dict) -> dict:
         # Shop products sold by weight/size: every in-stock option with its own
         # price; the guest taps one and the card sends its variant_id.
         "price_from": min((v["price"] for v in variants), default=None),
+        "kind": row.get("kind"),
     }
+    if row.get("custom_box_same_name"):
+        data["custom_box_same_name"] = row["custom_box_same_name"]
     if variants:
         data["variants"] = variants
     return {"type": "product_card", "data": data}
