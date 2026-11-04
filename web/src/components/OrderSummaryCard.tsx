@@ -67,17 +67,56 @@ export default function OrderSummaryCard({ cart }: { cart: CartState }) {
         ))}
       </ul>
 
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          marginTop: "0.75rem",
-          fontWeight: 700,
-        }}
-      >
-        <span>Total</span>
-        <span>{cart.total_price.toFixed(2)} AED</span>
-      </div>
+      {cart.totals ? (
+        <div role="group" aria-label="Order totals" style={{ marginTop: "0.75rem" }}>
+          <TotalRow label="Subtotal" value={`${cart.totals.subtotal.toFixed(2)} AED`} />
+          <TotalRow
+            label={`VAT (${Math.round(cart.totals.vat_rate * 100)}%)`}
+            value={`${cart.totals.vat.toFixed(2)} AED`}
+          />
+          <TotalRow label="Shipping" value="Calculated at checkout" muted />
+          <TotalRow label="Promo code" value="Applied at checkout" muted />
+          <TotalRow
+            label={cart.totals.total_label}
+            value={`${cart.totals.total_with_vat.toFixed(2)} AED`}
+            bold
+          />
+        </div>
+      ) : (
+        <TotalRow
+          label="Subtotal (before VAT, delivery and promo)"
+          value={`${cart.total_price.toFixed(2)} AED`}
+          bold
+        />
+      )}
+    </div>
+  );
+}
+
+function TotalRow({
+  label,
+  value,
+  bold,
+  muted,
+}: {
+  label: string;
+  value: string;
+  bold?: boolean;
+  muted?: boolean;
+}) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        justifyContent: "space-between",
+        gap: "1rem",
+        marginTop: "0.25rem",
+        fontWeight: bold ? 700 : 400,
+        color: muted ? "#6d7081" : undefined,
+      }}
+    >
+      <span>{label}</span>
+      <span>{value}</span>
     </div>
   );
 }

@@ -276,10 +276,31 @@ async def test_get_cart_endpoint_returns_state(client, seeded):
     assert resp.status_code == 200
     body = resp.json()
     assert body["conversation_id"] == seeded["session_token"]
-    assert body["total_price"] == 160.0
+    assert body["total_price"] == 160.0  # stays the subtotal
+    assert body["totals"]["subtotal"] == 160.0
+    assert body["totals"]["vat"] == 8.0 and body["totals"]["total_with_vat"] == 168.0
     assert len(body["items"]) == 1
 
 
 async def test_get_cart_unknown_conversation_404(client, prepare_db):
     resp = await client.get("/api/cart/does-not-exist")
     assert resp.status_code == 404
+
+
+def test_totals_read_like_the_shop_checkout():
+    """Subtotal + 5% VAT (added on top), shipping/promo left to the store."""
+    t = cart_service.checkout_totals(990.0)
+    assert t == {
+        "subtotal": 990.0,
+        "vat_rate": 0.05,
+        "vat": 49.5,
+        "total_with_vat": 1039.5,
+        "shipping": "calculated at checkout",
+        "promo": "promo codes are applied at checkout",
+        "total_label": "Total before shipping and promo",
+    }
+    assert cart_service.checkout_totals(78.0)["vat"] == 3.9
+    assert cart_service.checkout_totals(0.0)["total_with_vat"] == 0.0
+    # half-up on the cent: 33.33 * 5% = 1.6665 -> 1.67
+    assert cart_service.checkout_totals(33.33)["vat"] == 1.67
+

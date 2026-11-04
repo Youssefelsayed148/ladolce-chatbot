@@ -681,6 +681,27 @@ def _serialize_item(item: CartItem) -> dict:
     }
 
 
+def checkout_totals(subtotal: float) -> dict:
+    """Totals the way the shop's checkout reads: subtotal, VAT added on top,
+    then shipping and promo (which only the store can decide)."""
+    from decimal import ROUND_HALF_UP, Decimal
+
+    from app.core.config import get_settings
+
+    rate = get_settings().vat_rate
+    sub = Decimal(str(subtotal)).quantize(Decimal("0.01"), ROUND_HALF_UP)
+    vat = (sub * Decimal(str(rate))).quantize(Decimal("0.01"), ROUND_HALF_UP)
+    return {
+        "subtotal": float(sub),
+        "vat_rate": rate,
+        "vat": float(vat),
+        "total_with_vat": float(sub + vat),
+        "shipping": "calculated at checkout",
+        "promo": "promo codes are applied at checkout",
+        "total_label": "Total before shipping and promo",
+    }
+
+
 async def get_cart_state_by_draft(session: AsyncSession, draft: CartDraft) -> dict:
     items = await _load_items(session, draft.id)
     serialized = [_serialize_item(i) for i in items]
@@ -689,7 +710,8 @@ async def get_cart_state_by_draft(session: AsyncSession, draft: CartDraft) -> di
         "cart_draft_id": draft.id,
         "status": draft.status,
         "items": serialized,
-        "total_price": round(total, 2),
+        "total_price": round(total, 2),  # the subtotal; kept for the order payload
+        "totals": checkout_totals(round(total, 2)),
     }
 
 

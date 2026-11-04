@@ -42,7 +42,19 @@ export interface CartState {
   cart_draft_id: number | null;
   status: "building" | "reviewed" | "confirmed" | "abandoned";
   items: CartItem[];
+  /** The subtotal (before VAT, shipping and promo). */
   total_price: number;
+  totals?: CartTotals;
+}
+
+export interface CartTotals {
+  subtotal: number;
+  vat_rate: number;
+  vat: number;
+  total_with_vat: number;
+  shipping: string;
+  promo: string;
+  total_label: string;
 }
 
 export interface ConfirmResult {
