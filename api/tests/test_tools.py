@@ -273,7 +273,7 @@ def test_all_tools_have_additional_properties_false():
     """Open models tend to invent extra parameters if not explicitly forbidden.
     Every tool schema should declare additionalProperties: False.
     """
-    assert len(ALL_TOOLS) == 11
+    assert len(ALL_TOOLS) == 12
     for tool in ALL_TOOLS:
         params = tool["function"]["parameters"]
         assert params.get("type") == "object"
@@ -307,3 +307,26 @@ async def test_knowledge_base_search_embeds_via_embedding_client_not_chat_client
             embedding_client,
         )
     assert embedding_client.embeddings.calls
+
+
+@pytest.mark.asyncio
+async def test_list_plate_sizes_returns_size_cards(prepare_db):
+    from app.models import Conversation, PlateSize
+
+    async with get_sessionmaker()() as session:
+        session.add(PlateSize(name="The Classic Petite", capacity=18, base_price=60,
+                              store_canvas_id="c1", kind="BOX", capacity_grams=350, max_pieces=18))
+        session.add(PlateSize(name="Legacy Tray", capacity=40, base_price=90))
+        await session.commit()
+        convo = Conversation(session_token="t-sizes")
+        session.add(convo)
+        await session.commit()
+        result = await dispatch_tool(session, None, convo, None, "list_plate_sizes", {})
+
+    assert [b["type"] for b in result.ui_blocks] == ["plate_size_options"]
+    sizes = result.ui_blocks[0]["data"]["sizes"]
+    assert sizes[0]["name"] == "The Classic Petite"
+    assert (sizes[0]["max_pieces"], sizes[0]["capacity_grams"], sizes[0]["price"]) == (18, 350, 60.0)
+    # Legacy (non-store) plates only know their slot capacity.
+    assert (sizes[1]["max_pieces"], sizes[1]["capacity_grams"]) == (40, None)
+    assert result.data["plate_sizes"] == sizes
