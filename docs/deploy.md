@@ -55,3 +55,12 @@ cart's low-stock badge when `availableStock` is null (it shows "Only null left i
 ## 5. Smoke test
 Open the store page, send a chat message, build a box, Review, Confirm, and check the box
 appears in the store cart; stop at the checkout page.
+
+## Comparing chat models
+
+`api/scripts/model_check.py` runs a scripted order flow (sizes, start a box, add dates,
+overfill, ribbon, review) against a running API and reports PASS/FAIL per step, including
+whether the model really called the cart tools. Change `LLM_MODEL` in `.env`, redeploy,
+then run it from any machine with Python and `httpx`:
+
+    python api/scripts/model_check.py --base-url https://YOUR_DOMAIN --label gpt-4.1-mini
