@@ -45,6 +45,17 @@ ALIASES = {
 SITE = "https://ladolcesaveur.com"
 INDIVIDUAL = "Individual Dates"
 
+# Curated shop bestsellers by live title (provisional until the client signs off;
+# swap freely). Fillings are never bestsellers.
+BESTSELLER_TITLES = {
+    "The Royal Assortment",
+    "The Signature Selection",
+    "Khudri Dates with Almond",
+    "Khudri Dates with Pistachio",
+    "Pistachio Date with pastachio cream",
+    "Golden Sukkari Dates",
+}
+
 
 def norm(s: str) -> str:
     return re.sub(r"[^a-z0-9]+", " ", (s or "").lower()).strip()
@@ -215,6 +226,8 @@ def apply_sync(session: Session, live: dict) -> dict:
                            is_single_item=True, is_bestseller=False, **fields)
             session.add(prod)
             stats["products_created"] += 1
+        if lp["titleEn"] in BESTSELLER_TITLES:
+            prod.is_bestseller = True
         session.flush()
         claimed.add(prod.id)
 

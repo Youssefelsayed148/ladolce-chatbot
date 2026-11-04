@@ -106,6 +106,20 @@ def _shop_clause():
     )
 
 
+_STOP_WORDS = {"with", "the", "and", "of", "a", "date", "dates"}
+
+
+def _tokens(text: str) -> set[str]:
+    """Words of a name/query, lower-cased, plural 's' stripped, filler dropped -
+    so "Khudri Date with Almonds" and "Khudri Dates with Almond" compare equal."""
+    out = set()
+    for w in re.findall(r"[a-z0-9]+", (text or "").lower()):
+        if w in _STOP_WORDS:
+            continue
+        out.add(w[:-1] if len(w) > 3 and w.endswith("s") else w)
+    return out
+
+
 def _filling_row(p: Product) -> dict:
     """A filling as the model sees it: name and weight only, never a price."""
     return {
@@ -254,6 +268,18 @@ async def search_products(
         # Flavored Dates"); a wrong guess must not hide a product the name finds.
         category = None
         products = await _run(None)
+
+    if not products and term:
+        # Wording/plural tolerance: every meaningful word of the query must be in
+        # the product's name (then its description).
+        want = _tokens(term)
+        if want:
+            stmt = select(Product).where(Product.is_active.is_(True))
+            stmt = stmt.where(_filling_clause() if for_box else _shop_clause())
+            stmt = stmt.options(selectinload(Product.category), selectinload(Product.variants))
+            cands = list((await session.execute(stmt)).scalars().all())
+            by_name = [p for p in cands if want <= _tokens(p.name)]
+            products = (by_name or [p for p in cands if want <= _tokens(f"{p.name} {p.description or ''}")])[:limit]
 
     if term and not category and products and not for_box:
         products = products + await _cross_category_siblings(session, products)

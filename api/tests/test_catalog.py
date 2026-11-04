@@ -72,3 +72,22 @@ async def test_list_categories_returns_names_in_sort_order(seeded):
     async with get_sessionmaker()() as session:
         categories = await catalog_service.list_categories(session)
     assert [c.name for c in categories] == ["Individual Dates", "Date Packs"]
+
+
+async def test_search_tolerates_plural_and_word_order(prepare_db):
+    """The model often sends "Khudri Date with Almonds" for "Khudri Dates with Almond"."""
+    from app.services import catalog as catalog_service
+
+    async with get_sessionmaker()() as session:
+        packs = Category(name="Pre-curated", sort_order=0)
+        session.add(packs)
+        await session.flush()
+        session.add_all([
+            Product(category_id=packs.id, name="Khudri Dates with Almond", price=110, is_active=True),
+            Product(category_id=packs.id, name="Khudri Dates with Pecans", price=120, is_active=True),
+        ])
+        await session.commit()
+        for q in ("Khudri Date with Almonds", "almond khudri dates", "khudri dates with almond"):
+            rows = await catalog_service.search_products(session, q)
+            assert [r["name"] for r in rows] == ["Khudri Dates with Almond"], q
+        assert await catalog_service.search_products(session, "Khudri Date with Walnuts") == []

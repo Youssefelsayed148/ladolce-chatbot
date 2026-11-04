@@ -75,6 +75,14 @@ def test_sync_clears_bestseller_flag_on_fillings():
     assert not any(r.name in ("Jordanian Majdool Date", "Golden Sukkari Date") for r in flagged)
 
 
+def test_sync_flags_curated_shop_bestsellers():
+    s = _session()
+    sync.apply_sync(s, _live())
+    best = s.scalars(select(Product).where(Product.is_bestseller.is_(True), Product.is_active.is_(True))).all()
+    assert 4 <= len(best) <= 6
+    assert all(p.store_product_id and p.variants and p.store_date_id is None for p in best)
+
+
 def test_unmatched_old_rows_deactivated_not_deleted():
     s = _session()
     before = len(s.scalars(select(Product)).all())

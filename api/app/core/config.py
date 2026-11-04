@@ -27,6 +27,11 @@ class Settings(BaseSettings):
     # Checkout display: VAT is added on top of the subtotal (seen on the shop:
     # 990 + 49.5 = 1040). Shipping and promo codes are left to the store.
     vat_rate: float = Field(default=0.05)
+    # Values read from the store's public settings (/api/store/settings).
+    shipping_flat: float = Field(default=20.0)
+    free_shipping_min: float = Field(default=150.0)
+    promo_code: str = Field(default="DOLCE")
+    promo_percent: int = Field(default=15)
 
     # Where the guest finishes the order (the store's own checkout page).
     store_checkout_url: str = Field(default="https://ladolcesaveur.com/checkout")

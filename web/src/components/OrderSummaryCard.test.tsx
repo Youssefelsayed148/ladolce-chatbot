@@ -13,10 +13,12 @@ const cart: CartState = {
     subtotal: 990,
     vat_rate: 0.05,
     vat: 49.5,
-    total_with_vat: 1039.5,
-    shipping: "calculated at checkout",
-    promo: "promo codes are applied at checkout",
-    total_label: "Total before shipping and promo",
+    shipping_fee: 0,
+    free_shipping_min: 150,
+    promo_code: "DOLCE",
+    promo_percent: 15,
+    total_estimated: 1040,
+    total_label: "Estimated total",
   },
 };
 
@@ -27,13 +29,24 @@ describe("OrderSummaryCard totals", () => {
     expect(within(totals).getByText("Subtotal")).toBeInTheDocument();
     expect(within(totals).getByText("990.00 AED")).toBeInTheDocument();
     expect(within(totals).getByText("VAT (5%)")).toBeInTheDocument();
-    expect(within(totals).getByText("49.50 AED")).toBeInTheDocument();
+    expect(within(totals).getByText("49.5 AED")).toBeInTheDocument();
     expect(within(totals).getByText("Shipping")).toBeInTheDocument();
-    expect(within(totals).getByText("Calculated at checkout")).toBeInTheDocument();
-    expect(within(totals).getByText("Promo code")).toBeInTheDocument();
-    expect(within(totals).getByText("Applied at checkout")).toBeInTheDocument();
-    expect(within(totals).getByText("Total before shipping and promo")).toBeInTheDocument();
-    expect(within(totals).getByText("1039.50 AED")).toBeInTheDocument();
+    expect(within(totals).getByText("Free")).toBeInTheDocument();
+    expect(within(totals).getByText("Estimated total")).toBeInTheDocument();
+    expect(within(totals).getByText("1040 AED")).toBeInTheDocument();
+    expect(
+      within(totals).getByText("DOLCE: 15% off, enter it at checkout")
+    ).toBeInTheDocument();
+  });
+
+  it("shows the flat shipping fee under the free-shipping minimum", () => {
+    render(
+      <OrderSummaryCard
+        cart={{ ...cart, totals: { ...cart.totals!, subtotal: 100, vat: 5, shipping_fee: 20, total_estimated: 125 } }}
+      />
+    );
+    expect(screen.getByText("20 AED")).toBeInTheDocument();
+    expect(screen.getByText("125 AED")).toBeInTheDocument();
   });
 
   it("falls back to an honest subtotal label when the server sent no totals", () => {

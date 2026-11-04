@@ -278,7 +278,7 @@ async def test_get_cart_endpoint_returns_state(client, seeded):
     assert body["conversation_id"] == seeded["session_token"]
     assert body["total_price"] == 160.0  # stays the subtotal
     assert body["totals"]["subtotal"] == 160.0
-    assert body["totals"]["vat"] == 8.0 and body["totals"]["total_with_vat"] == 168.0
+    assert body["totals"]["vat"] == 8.0 and body["totals"]["total_estimated"] == 168  # free shipping >= 150
     assert len(body["items"]) == 1
 
 
@@ -288,19 +288,21 @@ async def test_get_cart_unknown_conversation_404(client, prepare_db):
 
 
 def test_totals_read_like_the_shop_checkout():
-    """Subtotal + 5% VAT (added on top), shipping/promo left to the store."""
+    """Subtotal + 5% VAT on top, AED 20 shipping under 150 (free from 150),
+    total rounded to whole AED; the DOLCE code is entered at checkout."""
     t = cart_service.checkout_totals(990.0)
-    assert t == {
-        "subtotal": 990.0,
-        "vat_rate": 0.05,
-        "vat": 49.5,
-        "total_with_vat": 1039.5,
-        "shipping": "calculated at checkout",
-        "promo": "promo codes are applied at checkout",
-        "total_label": "Total before shipping and promo",
-    }
+    assert t["subtotal"] == 990.0 and t["vat_rate"] == 0.05 and t["vat"] == 49.5
+    assert t["shipping_fee"] == 0.0 and t["free_shipping_min"] == 150.0
+    assert t["total_estimated"] == 1040  # the shop's own example: 990 + 49.5 -> 1040
+    assert t["promo_code"] == "DOLCE" and t["promo_percent"] == 15
+    assert t["total_label"] == "Estimated total"
+    low = cart_service.checkout_totals(100.0)
+    assert low["shipping_fee"] == 20.0 and low["vat"] == 5.0 and low["total_estimated"] == 125
+    assert cart_service.checkout_totals(150.0)["shipping_fee"] == 0.0
     assert cart_service.checkout_totals(78.0)["vat"] == 3.9
-    assert cart_service.checkout_totals(0.0)["total_with_vat"] == 0.0
-    # half-up on the cent: 33.33 * 5% = 1.6665 -> 1.67
-    assert cart_service.checkout_totals(33.33)["vat"] == 1.67
+    empty = cart_service.checkout_totals(0.0)
+    assert empty["shipping_fee"] == 0.0 and empty["total_estimated"] == 0
+    # half-up on the first decimal: 33.33 * 5% = 1.6665 -> 1.7
+    assert cart_service.checkout_totals(33.33)["vat"] == 1.7
+
 

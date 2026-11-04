@@ -172,10 +172,11 @@ async def _cart_context(session: AsyncSession, draft) -> str:
                 f"(cart_item_id={it['cart_item_id']})"
             )
     t = state["totals"]
+    ship = "free" if not t["shipping_fee"] else f"{t['shipping_fee']:g} AED (free from {t['free_shipping_min']:g} AED)"
     lines.append(
-        f"  Totals: subtotal {t['subtotal']} AED + VAT {round(t['vat_rate'] * 100)}% "
-        f"{t['vat']} AED = {t['total_with_vat']} AED before shipping and promo "
-        "(shipping and promo codes are applied at checkout)."
+        f"  Totals: subtotal {t['subtotal']:g} AED + VAT {round(t['vat_rate'] * 100)}% {t['vat']:g} AED "
+        f"+ shipping {ship} = estimated total {t['total_estimated']} AED. "
+        f"Code {t['promo_code']} gives {t['promo_percent']}% off, entered at checkout."
     )
     return (
         "Current cart (use these cart_item_ids; keep adding to the existing box, never "

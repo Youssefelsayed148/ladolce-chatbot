@@ -258,7 +258,7 @@ async def test_cart_and_box_dates_context_carry_ids_between_turns(box):
         cart = await _cart_context(s, d)
         assert f"cart_item_id={box['item']}" in cart
         assert "Ajwa x3" in cart and "7 pieces" in cart and "ribbon: not chosen" in cart
-        assert "Totals: subtotal" in cart and "VAT 5%" in cart and "before shipping and promo" in cart
+        assert "Totals: subtotal" in cart and "VAT 5%" in cart and "estimated total" in cart.lower()
         dates = await _box_dates_context(s)
         assert f"product_id={box['light']}: Ajwa (10g)" in dates
         assert f"product_id={box['heavy']}: Majdool (20g)" in dates
