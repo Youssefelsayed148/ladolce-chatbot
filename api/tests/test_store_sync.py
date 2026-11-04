@@ -63,6 +63,18 @@ def test_aliases_map_majdool_to_khudri_and_keep_bestseller():
     assert paste.is_bestseller is True
 
 
+def test_sync_clears_bestseller_flag_on_fillings():
+    s = _session()
+    for r in s.scalars(select(Product)).all():
+        if r.name in ("Jordanian Majdool Date", "Golden Sukkari Date", "Khudri Date with Pistachio"):
+            r.is_bestseller = True  # as on the live DB before the fix
+    s.commit()
+    sync.apply_sync(s, _live())
+    flagged = [r for r in s.scalars(select(Product).where(Product.is_bestseller.is_(True))).all()]
+    assert flagged and all(r.store_date_id is None for r in flagged)
+    assert not any(r.name in ("Jordanian Majdool Date", "Golden Sukkari Date") for r in flagged)
+
+
 def test_unmatched_old_rows_deactivated_not_deleted():
     s = _session()
     before = len(s.scalars(select(Product)).all())

@@ -31,6 +31,7 @@ from app.models import (
     ProductVariant,
 )
 
+from app.services import catalog as catalog_service
 from app.services import store_quote
 
 logger = logging.getLogger("app.cart")
@@ -263,6 +264,11 @@ async def add_single_product(
     if quantity < 1:
         raise CartError("Quantity must be at least 1.")
     product = await _get_product(session, product_id)
+    if catalog_service.is_filling(product):
+        raise CartError(
+            f"'{product.name}' is a box filling, available only inside a custom box "
+            "(not sold on its own)."
+        )
     variant = await _resolve_variant(session, product, variant_id, quantity)
     price = variant.price if variant else product.price
     # Price 0 = a bespoke-only date (a box filling, free inside a box), never sold alone.

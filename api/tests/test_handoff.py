@@ -15,7 +15,10 @@ async def ready(prepare_db):
         cat = Category(name="Individual Dates", sort_order=0)
         s.add(cat)
         await s.flush()
-        pack = Product(category_id=cat.id, name="Khudri Almond", price=110, is_active=True)
+        packs = Category(name="Date Packs", sort_order=1)
+        s.add(packs)
+        await s.flush()
+        pack = Product(category_id=packs.id, name="Khudri Almond", price=110, is_active=True)
         date = Product(category_id=cat.id, name="Ajwa", price=6, is_active=True,
                        store_date_id="date-1", weight_grams=10)
         plate = PlateSize(name="Box", capacity=200, base_price=60, store_canvas_id="canvas-1",

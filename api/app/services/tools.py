@@ -85,7 +85,10 @@ SEARCH_PRODUCTS_TOOL = {
         "description": (
             "Search the catalog for products by free text. Use for any question about "
             "what exists, prices, or flavours. Returns rows with product_id you can pass "
-            "to add_single_product / add_item_to_plate."
+            "to add_single_product. Individual dates are box fillings, not shop products: "
+            "they are hidden unless for_box is true (use it only while building a custom "
+            "box or when the guest asks which dates can go in a box); filling rows have "
+            "a weight and NO price."
         ),
         "parameters": {
             "type": "object",
@@ -93,6 +96,10 @@ SEARCH_PRODUCTS_TOOL = {
             "properties": {
                 "query": {"type": "string", "description": "Free-text search terms."},
                 "category": {"type": "string", "description": "Optional exact category name."},
+                "for_box": {
+                    "type": "boolean",
+                    "description": "True to list the dates that can fill a custom box (weight, no price).",
+                },
             },
             "required": ["query"],
         },
@@ -364,11 +371,17 @@ async def dispatch_tool(
                 rows = await catalog_service.list_bestsellers(session)
             else:
                 rows = await catalog_service.search_products(
-                    session, query=query, category=args.get("category")
+                    session,
+                    query=query,
+                    category=args.get("category"),
+                    for_box=bool(args.get("for_box")),
                 )
             return cart_service.ToolResult(
                 data={"results": rows},
-                ui_blocks=[_product_card_from_row(r) for r in rows],
+                # Fillings are shown by the box card, never as shop product cards.
+                ui_blocks=[
+                    _product_card_from_row(r) for r in rows if r.get("kind") != "box_filling"
+                ],
             )
 
         if name == "recommend_items":

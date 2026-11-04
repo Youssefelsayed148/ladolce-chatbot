@@ -31,7 +31,10 @@ async def seeded(prepare_db):
 
         ajwa = Product(category_id=cat.id, name="Ajwa Date", price=6, is_active=True)
         grand = Product(category_id=cat.id, name="Grand Tart", price=20, is_active=True)
-        pack = Product(category_id=cat.id, name="Khudri Pack (1kg)", price=160, is_active=True)
+        packs = Category(name="Date Packs", sort_order=1)
+        session.add(packs)
+        await session.flush()
+        pack = Product(category_id=packs.id, name="Khudri Pack (1kg)", price=160, is_active=True)
         session.add_all([ajwa, grand, pack])
         await session.flush()
 

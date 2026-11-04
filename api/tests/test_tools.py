@@ -60,9 +60,10 @@ async def test_recommend_items_routes_bestseller_phrasing_to_curated_flag(seeded
             session, None, seeded, None, "recommend_items", {"preference_notes": "bestsellers"}
         )
         names = {r["name"] for r in result.data["recommendations"]}
-        assert names == {"Jordanian Majdool Date", "The Royal Assortment"}
+        # Per-piece box fillings (Individual Dates) are never shop bestsellers.
+        assert names == {"The Royal Assortment"}
         # Product cards render for every matched item, not just a text answer.
-        assert len(result.ui_blocks) == 2
+        assert len(result.ui_blocks) == 1
         assert all(b["type"] == "product_card" for b in result.ui_blocks)
 
 
@@ -72,7 +73,7 @@ async def test_search_products_routes_bestseller_phrasing_to_curated_flag(seeded
             session, None, seeded, None, "search_products", {"query": "what are your best sellers"}
         )
         names = {r["name"] for r in result.data["results"]}
-        assert names == {"Jordanian Majdool Date", "The Royal Assortment"}
+        assert names == {"The Royal Assortment"}
 
 
 @pytest.mark.parametrize(
@@ -102,7 +103,7 @@ async def test_search_products_routes_broad_bestseller_phrasings(seeded, phrasin
             session, None, seeded, None, "search_products", {"query": phrasing}
         )
         names = {r["name"] for r in result.data["results"]}
-        assert names == {"Jordanian Majdool Date", "The Royal Assortment"}
+        assert names == {"The Royal Assortment"}
 
 
 def test_is_bestseller_query_does_not_over_match_unrelated_text():
@@ -116,10 +117,15 @@ def test_is_bestseller_query_does_not_over_match_unrelated_text():
 async def test_search_products_non_bestseller_query_is_unaffected(seeded):
     async with get_sessionmaker()() as session:
         result = await dispatch_tool(
-            session, None, seeded, None, "search_products", {"query": "Ajwa"}
+            session, None, seeded, None, "search_products", {"query": "Royal"}
         )
         names = {r["name"] for r in result.data["results"]}
-        assert names == {"Ajwa Date"}
+        assert names == {"The Royal Assortment"}
+        # A per-piece filling is not a shop product: hidden unless asked for a box.
+        hidden = await dispatch_tool(
+            session, None, seeded, None, "search_products", {"query": "Ajwa"}
+        )
+        assert hidden.data["results"] == []
 
 
 async def test_search_products_exact_category_still_matches(seeded):
@@ -215,14 +221,11 @@ async def test_search_products_singular_query_surfaces_all_variety_siblings(vari
             session, None, variant_seeded, None, "search_products", {"query": "Golden Sukkari Date"}
         )
         names = {r["name"] for r in result.data["results"]}
-        assert names == {
-            "Golden Sukkari Date",
-            "Golden Sukkari Dates (500g)",
-            "Golden Sukkari Dates (1kg)",
-        }
-        # Every match renders its own card - the guest sees all three options
+        # The per-piece "Golden Sukkari Date" is a box filling: never offered.
+        assert names == {"Golden Sukkari Dates (500g)", "Golden Sukkari Dates (1kg)"}
+        # Every match renders its own card - the guest sees both pack options
         # (and their distinct prices) rather than the concierge picking one.
-        assert len(result.ui_blocks) == 3
+        assert len(result.ui_blocks) == 2
         assert all(b["type"] == "product_card" for b in result.ui_blocks)
 
 
@@ -234,11 +237,7 @@ async def test_search_products_plural_query_surfaces_all_variety_siblings(varian
             session, None, variant_seeded, None, "search_products", {"query": "Golden Sukkari Dates"}
         )
         names = {r["name"] for r in result.data["results"]}
-        assert names == {
-            "Golden Sukkari Date",
-            "Golden Sukkari Dates (500g)",
-            "Golden Sukkari Dates (1kg)",
-        }
+        assert names == {"Golden Sukkari Dates (500g)", "Golden Sukkari Dates (1kg)"}
 
 
 async def test_search_products_category_filter_scopes_to_the_tiered_pack_only(variant_seeded):
@@ -263,7 +262,7 @@ async def test_search_products_unrelated_query_does_not_pull_in_siblings(variant
     # expansion must be a no-op here, not a blanket "return everything".
     async with get_sessionmaker()() as session:
         result = await dispatch_tool(
-            session, None, variant_seeded, None, "search_products", {"query": "Ajwa"}
+            session, None, variant_seeded, None, "search_products", {"query": "Ajwa", "for_box": True}
         )
         names = {r["name"] for r in result.data["results"]}
         assert names == {"Ajwa Date"}

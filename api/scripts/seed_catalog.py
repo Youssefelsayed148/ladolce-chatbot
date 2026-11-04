@@ -142,7 +142,8 @@ def seed(session: Session, products_data: list[dict], plate_sizes_data: list[dic
                 image_url=row.get("image_url"),
                 is_single_item=True,
                 is_active=price is not None,
-                is_bestseller=name in BESTSELLER_NAMES,
+                # Individual Dates are box fillings, never shop bestsellers.
+                is_bestseller=name in BESTSELLER_NAMES and cat_name != "Individual Dates",
             )
         )
         product_count += 1

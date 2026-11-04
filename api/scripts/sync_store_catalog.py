@@ -278,6 +278,13 @@ def apply_sync(session: Session, live: dict) -> dict:
             r.is_active = False
             stats["products_deactivated"] += 1
 
+    # Box fillings are never bestsellers (the shop sells dates by 500g/1kg packs).
+    for r in ind:
+        if r.is_bestseller:
+            r.is_bestseller = False
+    for r in session.scalars(select(Product).where(Product.store_date_id.is_not(None))):
+        r.is_bestseller = False
+
     # Canvases <-> plate sizes (matched on max pieces)
     plates = list(session.scalars(select(PlateSize)).all())
     for c in live["canvases"]:
