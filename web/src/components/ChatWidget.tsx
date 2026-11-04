@@ -172,7 +172,9 @@ export default function ChatWidget() {
   );
 
   const send = useCallback(
-    async (text: string) => {
+    // `hidden` is appended to what the server receives but never shown: it is the
+    // exact product/variant ids a card's Add button picked.
+    async (text: string, hidden = "") => {
       const trimmed = text.trim();
       if (!trimmed || sending) return;
 
@@ -190,7 +192,7 @@ export default function ChatWidget() {
       setThinking(true);
 
       try {
-        await streamChat(trimmed, conversationId, handleEvent);
+        await streamChat(trimmed + hidden, conversationId, handleEvent);
       } catch {
         patchAssistant(assistantId, (m) => ({
           streaming: false,
@@ -246,11 +248,16 @@ export default function ChatWidget() {
               key={`${messageId}-${i}`}
               data={block.data}
               imageUrl={pid != null ? productImages[pid] : null}
-              onAdd={(name) =>
+              onAdd={(name, variant) =>
                 void send(
-                  boxInProgress
+                  boxInProgress && !variant
                     ? `I'd like to add ${name} to my box, please.`
-                    : `I'd like to add ${name} to my order, please.`
+                    : variant
+                    ? `I'd like to add ${name} (${variant.label}) to my order, please.`
+                    : `I'd like to add ${name} to my order, please.`,
+                  pid != null && variant
+                    ? ` [add product_id=${pid} variant_id=${variant.variant_id} qty=1]`
+                    : ""
                 )
               }
             />

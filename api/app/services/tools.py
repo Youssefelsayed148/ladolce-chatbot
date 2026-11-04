@@ -480,19 +480,20 @@ def _plate_size_option(plate) -> dict:
 
 
 def _product_card_from_row(row: dict) -> dict:
-    return {
-        "type": "product_card",
-        "data": {
-            "product_id": row.get("product_id"),
-            "name": row.get("name"),
-            "description": row.get("description"),
-            "price": row.get("price"),
-            # ProductCard uses this to label a per-piece Individual Dates price
-            # ("6 AED / piece") - without it, that price sits next to a weight-
-            # tiered card ("500g — 65 AED") with no unit, reading as inconsistent.
-            "category": row.get("category"),
-        },
+    variants = row.get("variants") or []
+    data = {
+        "product_id": row.get("product_id"),
+        "name": row.get("name"),
+        "description": row.get("description"),
+        "price": row.get("price"),
+        "category": row.get("category"),
+        # Shop products sold by weight/size: every in-stock option with its own
+        # price; the guest taps one and the card sends its variant_id.
+        "price_from": min((v["price"] for v in variants), default=None),
     }
+    if variants:
+        data["variants"] = variants
+    return {"type": "product_card", "data": data}
 
 
 def parse_tool_args(raw: str) -> dict:
