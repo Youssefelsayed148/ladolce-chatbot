@@ -6,6 +6,10 @@
 
 	# FastAPI. flush_interval -1 streams the chat replies (SSE) token by token.
 	handle /api/* {
+		# Chat messages are tiny; cap bodies at the edge (the old nginx default was 1MB).
+		request_body {
+			max_size 1MB
+		}
 		reverse_proxy api:8000 {
 			flush_interval -1
 		}
