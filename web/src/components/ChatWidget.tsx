@@ -231,7 +231,10 @@ export default function ChatWidget() {
           </>
         ) : null;
       }
+      // Each box change emits a fresh box card; only the latest is current.
+      const lastPlateIdx = blocks.reduce((acc, b, i) => (b.type === "plate_builder" ? i : acc), -1);
       return blocks.map((block, i) => {
+        if (block.type === "plate_builder" && i !== lastPlateIdx) return null;
         if (block.type === "product_card") {
           const pid = block.data.product_id;
           return (

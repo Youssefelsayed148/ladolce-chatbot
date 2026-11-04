@@ -47,7 +47,9 @@ export default function ProductCard({
   const variant = parseVariant(data.name);
   const displayName = variant ? variant.baseName : data.name;
   const priceLabel =
-    data.price != null
+    data.price != null && Number(data.price) <= 0
+      ? "Box filling" // price 0 = bespoke-only date, free inside a custom box
+      : data.price != null
       ? variant
         ? `${variant.weight} — ${Number(data.price).toFixed(0)} AED`
         : data.category === PER_PIECE_CATEGORY

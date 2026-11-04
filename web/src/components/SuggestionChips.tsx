@@ -24,8 +24,7 @@ export default function SuggestionChips({
       className="lds-scroll"
       style={{
         display: "flex",
-        flexWrap: "nowrap",
-        overflowX: "auto",
+        flexWrap: "wrap", // wrap, never clip a chip off the right edge
         gap: space.sm,
         padding: `0 ${space.lg}px ${space.sm}px`,
       }}
@@ -47,8 +46,8 @@ function Chip({ text, onClick }: { text: string; onClick: () => void }) {
       onFocus={() => setFocused(true)}
       onBlur={() => setFocused(false)}
       style={{
-        flex: "0 0 auto",
-        whiteSpace: "nowrap",
+        flex: "0 1 auto",
+        textAlign: "left",
         padding: "8px 14px",
         borderRadius: radius.pill,
         border: `1px solid ${colors.border}`,
