@@ -257,3 +257,26 @@ async def test_ready_endpoint_checks_database(client):
     resp = await client.get("/api/health/ready")
     assert resp.status_code == 200
     assert resp.json() == {"status": "ready"}
+
+
+async def test_size_question_always_gets_size_cards_even_if_model_skips_the_tool(client, use_fake_openai):
+    from app.models import PlateSize
+
+    async with get_sessionmaker()() as session:
+        session.add(PlateSize(name="The Classic Petite", capacity=18, base_price=60,
+                              store_canvas_id="c1", kind="BOX", capacity_grams=350, max_pieces=18))
+        await session.commit()
+
+    use_fake_openai("plain")  # the fake model answers in prose and never calls a tool
+    events = await _collect_events(client, {"message": "what sizes do the boxes come in"})
+    blocks = [e["block"] for e in events if e["type"] == "ui_block"]
+    assert [b["type"] for b in blocks] == ["plate_size_options"]
+    assert blocks[0]["data"]["sizes"][0]["name"] == "The Classic Petite"
+    # and the follow-up chips fit the size question
+    assert "Which size is best for a gift?" in events[-1]["suggestions"]
+
+
+async def test_non_box_question_gets_no_size_cards(client, use_fake_openai):
+    use_fake_openai("plain")
+    events = await _collect_events(client, {"message": "hello"})
+    assert not [e for e in events if e["type"] == "ui_block"]
