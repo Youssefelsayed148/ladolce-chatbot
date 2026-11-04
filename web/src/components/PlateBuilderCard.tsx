@@ -136,12 +136,19 @@ export default function PlateBuilderCard({
                   {it.name ?? `#${it.product_id}`}
                   <span style={{ color: colors.textMuted }}> × {it.quantity}</span>
                 </span>
-                <span style={{ color: colors.textMuted, fontSize: 12 }}>
-                  {it.unit_price.toFixed(0)} ea
-                </span>
-                <span style={{ fontWeight: 600, color: colors.darkGreen, minWidth: 52, textAlign: "right" }}>
-                  {it.line_total.toFixed(0)} AED
-                </span>
+                {it.unit_price > 0 ? (
+                  <>
+                    <span style={{ color: colors.textMuted, fontSize: 12 }}>
+                      {it.unit_price.toFixed(0)} ea
+                    </span>
+                    <span style={{ fontWeight: 600, color: colors.darkGreen, minWidth: 52, textAlign: "right" }}>
+                      {it.line_total.toFixed(0)} AED
+                    </span>
+                  </>
+                ) : (
+                  // Store boxes are priced by size only - the dates inside are free.
+                  <span style={{ color: colors.textMuted, fontSize: 12, fontStyle: "italic" }}>included</span>
+                )}
                 {onRemove && it.name && (
                   <button
                     type="button"
