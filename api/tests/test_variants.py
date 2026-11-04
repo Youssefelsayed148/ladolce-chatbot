@@ -2,6 +2,7 @@
 
 import pytest
 import pytest_asyncio
+from sqlalchemy import select
 
 from app.core.db import get_sessionmaker
 from app.models import Category, Conversation, Product, ProductVariant
@@ -88,3 +89,29 @@ async def test_search_rows_list_in_stock_variants_and_tool_passes_variant_id(sho
         r = await dispatch_tool(s, None, conv, d, "add_single_product",
                                 {"product_id": shop["p"], "quantity": 1, "variant_id": shop["v1"]})
         assert r.data["added"]["variant"] == "500g / S"
+
+
+async def test_price_zero_single_product_is_blocked(shop):
+    """Bespoke-only dates (price 0) are fillings for boxes, never single products."""
+    async with get_sessionmaker()() as s:
+        zero = Product(category_id=(await s.get(Product, shop["p"])).category_id,
+                       name="Bespoke Only Date", price=0, is_active=True)
+        s.add(zero)
+        await s.commit()
+        d = await _d(s, shop)
+        with pytest.raises(cart_service.CartError) as e:
+            await cart_service.add_single_product(s, d, zero.id, 1)
+        assert "not available for purchase" in str(e.value)
+        state = await cart_service.get_cart_state_by_draft(s, d)
+        assert state["items"] == []
+
+
+async def test_price_zero_variant_is_blocked(shop):
+    async with get_sessionmaker()() as s:
+        s.add(ProductVariant(product_id=shop["p"], store_variant_id="v-free", sku="Z",
+                             label="Free", price=0, stock=3))
+        await s.commit()
+        free = (await s.execute(select(ProductVariant).where(ProductVariant.sku == "Z"))).scalar_one()
+        d = await _d(s, shop)
+        with pytest.raises(cart_service.CartError):
+            await cart_service.add_single_product(s, d, shop["p"], 1, free.id)

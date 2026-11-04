@@ -247,7 +247,8 @@ async def add_single_product(
     product = await _get_product(session, product_id)
     variant = await _resolve_variant(session, product, variant_id, quantity)
     price = variant.price if variant else product.price
-    if price is None:
+    # Price 0 = a bespoke-only date (a box filling, free inside a box), never sold alone.
+    if price is None or float(price) <= 0:
         raise CartError(f"'{product.name}' is not available for purchase.")
     _revert_to_building(draft)
 
