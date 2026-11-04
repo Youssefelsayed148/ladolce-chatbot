@@ -206,3 +206,44 @@ async def test_card_flags_estimate_when_store_quote_unavailable(box):
         r = await cart_service.add_item_to_plate(s, d, box["item"], box["heavy"], 2)  # stub -> None
         data = r.ui_blocks[0]["data"]
         assert data["price"] == 60.0 and data["price_estimated"] is True
+
+
+async def test_review_and_ribbon_are_done_server_side_even_if_model_does_not_call_tools(box):
+    """A model that answers in prose must not be able to block checkout."""
+    from app.services.chat import generate_chat_events
+    from tests.conftest import FakeOpenAIClient
+
+    async with get_sessionmaker()() as s:
+        d = await _draft(s, box)
+        await cart_service.add_item_to_plate(s, d, box["item"], box["light"], 2)
+        conv = await s.get(Conversation, box["conv"])
+        events = [
+            e async for e in generate_chat_events(
+                s, FakeOpenAIClient("plain"), "m", conv, d, [],
+                "use the Royal Gold ribbon and review my order",
+            )
+        ]
+        calls = [e["name"] for e in events if e["type"] == "tool_call"]
+        assert calls == ["set_finish", "request_review"]
+        assert any(e["type"] == "ui_block" and e["block"]["type"] == "review_order_button" for e in events)
+        d2 = await _draft(s, box)
+        assert d2.status == "reviewed"
+
+
+async def test_review_without_ribbon_gets_no_button_but_a_real_error_for_the_model(box):
+    from app.services.chat import generate_chat_events
+    from tests.conftest import FakeOpenAIClient
+
+    async with get_sessionmaker()() as s:
+        d = await _draft(s, box)
+        await cart_service.add_item_to_plate(s, d, box["item"], box["light"], 2)
+        conv = await s.get(Conversation, box["conv"])
+        fake = FakeOpenAIClient("plain")
+        events = [
+            e async for e in generate_chat_events(s, fake, "m", conv, d, [], "review my order")
+        ]
+        assert not any(e["type"] == "ui_block" for e in events)
+        # the model's first call saw the tool error (ribbon missing), not a success
+        sent = fake.chat.completions.calls[0]["messages"]
+        tool_msgs = [m for m in sent if m["role"] == "tool"]
+        assert "ribbon" in tool_msgs[0]["content"].lower()

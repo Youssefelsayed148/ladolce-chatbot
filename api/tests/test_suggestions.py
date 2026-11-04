@@ -16,7 +16,9 @@ def test_full_box_points_at_finish_gift_review():
 def test_box_flow_progression():
     assert rule_suggestions("", ["set_finish"], [])[0] == "Add a gift message"
     assert rule_suggestions("", ["set_gift_message"], [])[0] == "Review my order"
-    assert rule_suggestions("", ["request_review"], []) == []
+    assert rule_suggestions("", ["request_review"], [{"type": "review_order_button"}]) == []
+    # refused review (no button) still gets helpful chips
+    assert rule_suggestions("", ["request_review"], [])[0] == "Choose a ribbon finish"
 
 
 def test_sizes_listing_gets_size_questions():

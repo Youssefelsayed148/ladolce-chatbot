@@ -16,10 +16,12 @@ import logging
 import re
 from collections.abc import AsyncGenerator
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
-from app.models import CartDraft, Conversation
+from app.models import CartDraft, Conversation, Finish
+from app.services import cart as cart_service
 from app.services.suggestions import rule_suggestions
 from app.services.tools import ALL_TOOLS, dispatch_tool, parse_tool_args
 
@@ -37,6 +39,34 @@ _SIZE_INTENT_RE = re.compile(
     r"\b(sizes?|trays?|custom box|(build|make|create|design)\b.*\bbox|boxes come in)\b",
     re.IGNORECASE,
 )
+
+# Checkout steps must not depend on the model remembering to call a tool (gpt-4o
+# answered "review my order" in prose and never showed the Review button). When the
+# guest clearly asks for one of these, the server performs it BEFORE the model
+# replies, and the model then narrates the real result.
+_REVIEW_INTENT_RE = re.compile(
+    r"\b(review (my |the )?order|check ?out|place (my |the )?order|confirm (my |the )?order"
+    r"|ready to (order|review|pay))\b",
+    re.IGNORECASE,
+)
+
+
+async def _shortcut_calls(session: AsyncSession, draft: CartDraft, user_text: str) -> list[tuple[str, dict]]:
+    """Tool calls the guest's message unambiguously asks for, in order."""
+    calls: list[tuple[str, dict]] = []
+    text = user_text.lower()
+    plates = [
+        i for i in await cart_service._load_items(session, draft.id) if i.item_type == "custom_plate"
+    ]
+    if len(plates) == 1:
+        finishes = (await session.execute(select(Finish))).scalars().all()
+        named = next((f for f in finishes if f.name_en and f.name_en.lower() in text), None)
+        if named is not None:
+            calls.append(("set_finish", {"cart_item_id": plates[0].id, "finish_id": named.id}))
+    if _REVIEW_INTENT_RE.search(user_text):
+        calls.append(("request_review", {}))
+    return calls
+
 
 SYSTEM_PROMPT = (
     "You are the concierge for La Dolce Saveur, a luxury patisserie specialising in "
@@ -294,6 +324,26 @@ async def generate_chat_events(
     reply_parts: list[str] = []
     made_tool_calls: list[dict] = []
     ui_blocks: list[dict] = []
+
+    shortcuts = await _shortcut_calls(session, draft, user_text)
+    if shortcuts:
+        slots = {
+            i: {"id": f"auto_{i}", "name": name, "args": json.dumps(args)}
+            for i, (name, args) in enumerate(shortcuts)
+        }
+        messages.append(_assistant_tool_call_message(slots))
+        for i, (name, args) in enumerate(shortcuts):
+            made_tool_calls.append({"name": name, "arguments": args})
+            yield {"type": "tool_call", "name": name, "arguments": args}
+            result = await dispatch_tool(
+                session, client, conversation, draft, name, args, embedding_client
+            )
+            for block in result.ui_blocks:
+                ui_blocks.append(block)
+                yield {"type": "ui_block", "block": block}
+            messages.append(
+                {"role": "tool", "tool_call_id": f"auto_{i}", "content": _json_result(result.data)}
+            )
 
     for _round in range(MAX_TOOL_ROUNDS):
         stream = await client.chat.completions.create(
