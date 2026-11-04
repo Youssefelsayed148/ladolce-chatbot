@@ -682,23 +682,29 @@ def _serialize_item(item: CartItem) -> dict:
 
 
 def checkout_totals(subtotal: float) -> dict:
-    """Totals the way the shop's checkout reads: subtotal, VAT added on top,
-    then shipping and promo (which only the store can decide)."""
+    """Totals the way the shop's checkout reads (rules from the store's settings):
+    VAT added on top (shown to 1 decimal), flat shipping unless the subtotal
+    reaches the free-shipping minimum, total rounded to whole AED. The promo
+    code is entered by the guest at checkout, so it is described, not applied."""
     from decimal import ROUND_HALF_UP, Decimal
 
     from app.core.config import get_settings
 
-    rate = get_settings().vat_rate
+    st = get_settings()
     sub = Decimal(str(subtotal)).quantize(Decimal("0.01"), ROUND_HALF_UP)
-    vat = (sub * Decimal(str(rate))).quantize(Decimal("0.01"), ROUND_HALF_UP)
+    vat = (sub * Decimal(str(st.vat_rate))).quantize(Decimal("0.1"), ROUND_HALF_UP)
+    fee = Decimal(0) if sub <= 0 or sub >= Decimal(str(st.free_shipping_min)) else Decimal(str(st.shipping_flat))
+    total = (sub + vat + fee).quantize(Decimal("1"), ROUND_HALF_UP)
     return {
         "subtotal": float(sub),
-        "vat_rate": rate,
+        "vat_rate": st.vat_rate,
         "vat": float(vat),
-        "total_with_vat": float(sub + vat),
-        "shipping": "calculated at checkout",
-        "promo": "promo codes are applied at checkout",
-        "total_label": "Total before shipping and promo",
+        "shipping_fee": float(fee),
+        "free_shipping_min": st.free_shipping_min,
+        "promo_code": st.promo_code,
+        "promo_percent": st.promo_percent,
+        "total_estimated": int(total),
+        "total_label": "Estimated total",
     }
 
 

@@ -72,14 +72,21 @@ export default function OrderSummaryCard({ cart }: { cart: CartState }) {
           <TotalRow label="Subtotal" value={`${cart.totals.subtotal.toFixed(2)} AED`} />
           <TotalRow
             label={`VAT (${Math.round(cart.totals.vat_rate * 100)}%)`}
-            value={`${cart.totals.vat.toFixed(2)} AED`}
+            value={`${cart.totals.vat.toFixed(1)} AED`}
           />
-          <TotalRow label="Shipping" value="Calculated at checkout" muted />
-          <TotalRow label="Promo code" value="Applied at checkout" muted />
+          <TotalRow
+            label="Shipping"
+            value={cart.totals.shipping_fee ? `${cart.totals.shipping_fee.toFixed(0)} AED` : "Free"}
+          />
           <TotalRow
             label={cart.totals.total_label}
-            value={`${cart.totals.total_with_vat.toFixed(2)} AED`}
+            value={`${cart.totals.total_estimated.toFixed(0)} AED`}
             bold
+          />
+          <TotalRow
+            label="Promo code"
+            value={`${cart.totals.promo_code}: ${cart.totals.promo_percent}% off, enter it at checkout`}
+            muted
           />
         </div>
       ) : (

@@ -51,9 +51,13 @@ export interface CartTotals {
   subtotal: number;
   vat_rate: number;
   vat: number;
-  total_with_vat: number;
-  shipping: string;
-  promo: string;
+  /** 0 when the subtotal reaches free_shipping_min. */
+  shipping_fee: number;
+  free_shipping_min: number;
+  promo_code: string;
+  promo_percent: number;
+  /** Whole AED, like the shop's own summary. */
+  total_estimated: number;
   total_label: string;
 }
 
